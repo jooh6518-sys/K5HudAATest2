@@ -26,7 +26,7 @@ jobs:
       - name: Build phone test
         run: gradle --no-daemon :app:assembleDebug :app:bundleDebug
 
-      - name: Build AI3 direct HUD test
+      - name: Build AI3 Binder probe
         run: gradle --no-daemon :ai3:assembleDebug
 
       - name: Upload phone APK
@@ -46,6 +46,6 @@ jobs:
       - name: Upload AI3 APK
         uses: actions/upload-artifact@v4
         with:
-          name: AI3HudDirectTest-v0.1-debug-apk
+          name: AI3HudBinderProbe-v0.2-debug-apk
           path: ai3/build/outputs/apk/debug/ai3-debug.apk
           if-no-files-found: error
