@@ -23,19 +23,29 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Build debug APK and AAB
-        run: gradle --no-daemon assembleDebug bundleDebug
+      - name: Build phone test
+        run: gradle --no-daemon :app:assembleDebug :app:bundleDebug
 
-      - name: Upload APK
+      - name: Build AI3 direct HUD test
+        run: gradle --no-daemon :ai3:assembleDebug
+
+      - name: Upload phone APK
         uses: actions/upload-artifact@v4
         with:
           name: K5HudAATest-v0.6-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
-      - name: Upload AAB
+      - name: Upload phone AAB
         uses: actions/upload-artifact@v4
         with:
           name: K5HudAATest-v0.6-debug-aab
           path: app/build/outputs/bundle/debug/app-debug.aab
+          if-no-files-found: error
+
+      - name: Upload AI3 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI3HudDirectTest-v0.1-debug-apk
+          path: ai3/build/outputs/apk/debug/ai3-debug.apk
           if-no-files-found: error
