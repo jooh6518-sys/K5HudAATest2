@@ -16,10 +16,12 @@ import androidx.car.app.navigation.model.Maneuver;
 import androidx.car.app.navigation.model.Step;
 import androidx.car.app.navigation.model.TravelEstimate;
 import androidx.car.app.navigation.model.Trip;
+import androidx.lifecycle.DefaultLifecycleObserver;
+import androidx.lifecycle.LifecycleOwner;
 
 import java.util.TimeZone;
 
-public class HudTestScreen extends Screen {
+public class HudTestScreen extends Screen implements HudCommandBus.Listener {
     private final NavigationManager navigationManager;
     private String status = "대기 중";
     private boolean navigating = false;
@@ -36,6 +38,27 @@ public class HudTestScreen extends Screen {
                 invalidate();
             }
         });
+
+        getLifecycle().addObserver(new DefaultLifecycleObserver() {
+            @Override
+            public void onStart(@NonNull LifecycleOwner owner) {
+                HudCommandBus.register(HudTestScreen.this);
+            }
+
+            @Override
+            public void onStop(@NonNull LifecycleOwner owner) {
+                HudCommandBus.unregister(HudTestScreen.this);
+            }
+        });
+    }
+
+    @Override
+    public void onCommand(HudCommandBus.Command command) {
+        if (command.end) {
+            endNavigation();
+        } else {
+            sendTrip(command.maneuverType, command.meters, command.road);
+        }
     }
 
     @NonNull
