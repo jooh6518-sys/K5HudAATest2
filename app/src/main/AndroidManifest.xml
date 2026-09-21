@@ -5,6 +5,7 @@
 
     <application
         android:allowBackup="false"
+        android:icon="@drawable/ic_car_app"
         android:label="K5 HUD AA Test"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
@@ -20,7 +21,9 @@
 
         <service
             android:name=".HudTestCarAppService"
-            android:exported="true">
+            android:exported="true"
+            android:icon="@drawable/ic_car_app"
+            android:label="K5 HUD AA Test">
             <intent-filter>
                 <action android:name="androidx.car.app.CarAppService" />
                 <category android:name="androidx.car.app.category.NAVIGATION" />
