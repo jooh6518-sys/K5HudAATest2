@@ -7,6 +7,10 @@ final class HudCommandBus {
         void onCommand(Command command);
     }
 
+    interface ResultListener {
+        void onResult(String result);
+    }
+
     static final class Command {
         final boolean end;
         final int maneuverType;
@@ -32,10 +36,13 @@ final class HudCommandBus {
     }
 
     private static WeakReference<Listener> listenerRef = new WeakReference<>(null);
+    private static WeakReference<ResultListener> resultRef = new WeakReference<>(null);
     private static Command pending;
+    private static String lastResult = "대기 중";
 
     static synchronized void register(Listener listener) {
         listenerRef = new WeakReference<>(listener);
+        report("Android Auto 세션 연결됨");
         if (pending != null) {
             Command c = pending;
             pending = null;
@@ -47,6 +54,7 @@ final class HudCommandBus {
         Listener current = listenerRef.get();
         if (current == listener) {
             listenerRef.clear();
+            report("Android Auto 세션 연결 해제됨");
         }
     }
 
@@ -58,6 +66,26 @@ final class HudCommandBus {
         }
         pending = command;
         return false;
+    }
+
+    static synchronized void setResultListener(ResultListener listener) {
+        resultRef = new WeakReference<>(listener);
+        listener.onResult(lastResult);
+    }
+
+    static synchronized void clearResultListener(ResultListener listener) {
+        ResultListener current = resultRef.get();
+        if (current == listener) resultRef.clear();
+    }
+
+    static synchronized void report(String result) {
+        lastResult = result;
+        ResultListener listener = resultRef.get();
+        if (listener != null) listener.onResult(result);
+    }
+
+    static synchronized String getLastResult() {
+        return lastResult;
     }
 
     private HudCommandBus() {}
