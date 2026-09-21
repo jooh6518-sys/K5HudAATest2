@@ -1,4 +1,4 @@
-name: Build APK
+name: Build Android Packages
 
 on:
   workflow_dispatch:
@@ -21,14 +21,21 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.13'
 
-      - name: Build debug APK
-        run: gradle --no-daemon assembleDebug
+      - name: Build debug APK and AAB
+        run: gradle --no-daemon assembleDebug bundleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: K5HudAATest-debug-apk
+          name: K5HudAATest-v0.4-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Upload AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: K5HudAATest-v0.4-debug-aab
+          path: app/build/outputs/bundle/debug/app-debug.aab
           if-no-files-found: error
