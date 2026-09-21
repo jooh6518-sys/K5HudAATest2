@@ -10,17 +10,13 @@ android {
         applicationId 'com.joohkim.ai3hudtest'
         minSdk 26
         targetSdk 28
-        versionCode 3
-        versionName '0.3-ai3'
+        versionCode 4
+        versionName '0.4-ai3'
     }
 
     buildTypes {
-        debug {
-            debuggable true
-        }
-        release {
-            minifyEnabled false
-        }
+        debug { debuggable true }
+        release { minifyEnabled false }
     }
 
     compileOptions {
