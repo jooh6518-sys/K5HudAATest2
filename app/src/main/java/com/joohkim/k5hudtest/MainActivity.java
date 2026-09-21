@@ -10,7 +10,7 @@ import android.widget.TextView;
 
 import androidx.car.app.navigation.model.Maneuver;
 
-public class MainActivity extends Activity {
+public class MainActivity extends Activity implements HudCommandBus.ResultListener {
     private TextView status;
 
     @Override
@@ -28,21 +28,21 @@ public class MainActivity extends Activity {
         scroll.addView(root);
 
         TextView title = new TextView(this);
-        title.setText("K5 HUD · Android Auto TBT Test");
+        title.setText("K5 HUD · Android Auto TBT Test v0.3");
         title.setTextSize(22);
         root.addView(title);
 
         TextView body = new TextView(this);
         body.setText(
-                "차량을 정차한 상태에서 Android Auto를 연결한 뒤 아래 버튼을 누르세요.\n" +
-                "Android Auto의 NavigationManager.updateTrip()으로 테스트 길안내를 보냅니다."
+                "Android Auto에서 'K5 HUD AA Test'를 먼저 연 뒤 휴대폰의 버튼을 누르세요.\n" +
+                "이번 버전은 NavigationManager.navigationStarted()와 updateTrip()의 실제 결과를 휴대폰에 표시합니다."
         );
         body.setTextSize(15);
         body.setPadding(0, gap, 0, gap);
         root.addView(body);
 
         status = new TextView(this);
-        status.setText("상태: 대기 중");
+        status.setText("상태: " + HudCommandBus.getLastResult());
         status.setTextSize(16);
         status.setPadding(0, gap, 0, gap);
         root.addView(status);
@@ -57,20 +57,40 @@ public class MainActivity extends Activity {
                 () -> send(Maneuver.TYPE_U_TURN_LEFT, 200, "테스트 유턴 도로", "유턴 200m"));
         addButton(root, "■ 안내 종료", () -> {
             boolean delivered = HudCommandBus.dispatch(HudCommandBus.Command.end());
-            status.setText(delivered
-                    ? "상태: 안내 종료 명령 전달됨"
-                    : "상태: 종료 명령 대기 중 · Android Auto에서 앱을 한 번 열어주세요");
+            if (!delivered) {
+                status.setText("상태: AA 세션 미연결 · Android Auto에서 K5 HUD AA Test를 먼저 열어주세요");
+            } else {
+                status.setText("상태: 종료 명령 전달 중...");
+            }
         });
 
         setContentView(scroll);
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        HudCommandBus.setResultListener(this);
+        status.setText("상태: " + HudCommandBus.getLastResult());
+    }
+
+    @Override
+    protected void onStop() {
+        HudCommandBus.clearResultListener(this);
+        super.onStop();
+    }
+
+    @Override
+    public void onResult(String result) {
+        runOnUiThread(() -> status.setText("상태: " + result));
     }
 
     private void send(int maneuverType, int meters, String road, String label) {
         boolean delivered = HudCommandBus.dispatch(
                 HudCommandBus.Command.trip(maneuverType, meters, road, label));
         status.setText(delivered
-                ? "상태: " + label + " → Android Auto로 전달됨"
-                : "상태: " + label + " 대기 중 · Android Auto에서 앱을 한 번 열어주세요");
+                ? "상태: " + label + " · AA 호출 실행 중..."
+                : "상태: AA 세션 미연결 · Android Auto에서 K5 HUD AA Test를 먼저 열어주세요");
     }
 
     private void addButton(LinearLayout root, String text, Runnable action) {
