@@ -6,7 +6,7 @@
     </queries>
     <application
         android:allowBackup="false"
-        android:label="AI3 HUD Test 0.96"
+        android:label="AI3 HUD Test 0.97"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity android:name=".MainActivity" android:exported="true">

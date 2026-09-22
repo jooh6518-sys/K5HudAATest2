@@ -19,13 +19,15 @@ import com.google.android.gms.car.CarApiConnection;
 import com.google.android.gms.car.CarMessageManager;
 import com.google.android.gms.car.CarNavigationStatusManager;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
 public class MainActivity extends Activity {
-    private static final String TAG="AI3HUD096";
-    private static final String VERSION="0.96";
+    private static final String TAG="AI3HUD097";
+    private static final String VERSION="0.97";
     private static final String GEARHEAD="com.google.android.projection.gearhead";
 
     private TextView logView;
@@ -49,6 +51,8 @@ public class MainActivity extends Activity {
         }
         @Override public void onConnectionFailed() {
             log("!! CarApiConnection.onConnectionFailed()");
+            dumpConnectionState("onConnectionFailed");
+            tryGetCarApiAfterFailure();
         }
         @Override public void onConnectionSuspended() {
             log("!! CarApiConnection.onConnectionSuspended()");
@@ -70,7 +74,7 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         buildUi();
         log("AI3 HUD Test "+VERSION);
-        log("실제 CarApiConnection / navigation manager 연결 테스트");
+        log("Version 보완 + CarApiConnection 실패 원인 진단");
     }
 
     @Override protected void onDestroy(){
@@ -140,6 +144,13 @@ public class MainActivity extends Activity {
             init.setAccessible(true);
             init.invoke(null,gearheadContext);
             log("★ DynamicApiFactory.initialize SUCCESS");
+            log("Client Version.getVersion()="+com.google.android.gms.car.Version.getVersion());
+            try {
+                Class<?> versionClass=Class.forName("com.google.android.gms.car.Version");
+                log("Version class loader="+versionClass.getClassLoader());
+            } catch(Throwable t) {
+                log("Version LOAD ERROR="+err(t));
+            }
 
             Method isApi=dynamicApiFactory.getDeclaredMethod("isApiInterface",String.class);
             isApi.setAccessible(true);
@@ -161,6 +172,7 @@ public class MainActivity extends Activity {
             if(obj!=null){
                 log("connection class="+obj.getClass().getName());
                 dumpInterfaces(obj.getClass());
+                dumpObjectState(obj,"connection-created");
             }
             if(!(obj instanceof CarApiConnection)){
                 log("!! returned object is NOT CarApiConnection");
@@ -168,8 +180,10 @@ public class MainActivity extends Activity {
             }
             connection=(CarApiConnection)obj;
             log("★ CarApiConnection interface match");
+            dumpConnectionState("before-connect");
             connection.connect();
             log("connect() 호출 완료 - callback 대기");
+            dumpConnectionState("after-connect-call");
         }catch(Throwable t){
             log("!! Car API 연결 ERROR="+err(t));
         }
@@ -302,6 +316,53 @@ public class MainActivity extends Activity {
             try{ connection.disconnect(); }catch(Throwable t){ log("disconnect ERROR="+err(t)); }
         }
         connection=null;
+    }
+
+    private void tryGetCarApiAfterFailure(){
+        if(connection==null) return;
+        try{
+            CarApi a=connection.getCarApi();
+            log("getCarApi after failure="+a);
+            if(a!=null){
+                log("after-failure isConnectedToCar="+a.isConnectedToCar());
+                dumpObjectState(a,"carApi-after-failure");
+            }
+        }catch(Throwable t){
+            log("getCarApi after failure ERROR="+err(t));
+        }
+    }
+
+    private void dumpConnectionState(String where){
+        if(connection==null){
+            log("["+where+"] connection=null");
+            return;
+        }
+        log("["+where+"] connection="+connection.getClass().getName());
+        dumpObjectState(connection,where);
+    }
+
+    private void dumpObjectState(Object obj,String label){
+        if(obj==null){ log("STATE "+label+" = null"); return; }
+        try{
+            Class<?> c=obj.getClass();
+            int fieldCount=0;
+            while(c!=null && fieldCount<80){
+                Field[] fs=c.getDeclaredFields();
+                for(Field fld:fs){
+                    if(fieldCount++>=80) break;
+                    try{
+                        fld.setAccessible(true);
+                        Object v=Modifier.isStatic(fld.getModifiers()) ? fld.get(null) : fld.get(obj);
+                        String value=String.valueOf(v);
+                        if(value.length()>300) value=value.substring(0,300)+"...";
+                        log(" STATE "+label+" "+c.getSimpleName()+"."+fld.getName()+"="+value);
+                    }catch(Throwable ignored){}
+                }
+                c=c.getSuperclass();
+            }
+        }catch(Throwable t){
+            log("dumpObjectState ERROR="+err(t));
+        }
     }
 
     private void dumpInterfaces(Class<?> c){
