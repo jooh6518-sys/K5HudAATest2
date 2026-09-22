@@ -37,8 +37,8 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 public class MainActivity extends Activity {
-    private static final String TAG="AI3HUD099";
-    private static final String VERSION="0.99";
+    private static final String TAG="AI3HUD100";
+    private static final String VERSION="1.00";
     private static final String GEARHEAD="com.google.android.projection.gearhead";
 
     private TextView logView;
@@ -89,7 +89,7 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         buildUi();
         log("AI3 HUD Test "+VERSION);
-        log("CarApi 접근 거부 진단 + 실제 sdk_impl.jar 추출");
+        log("Gearhead 서버 접근검사 분석용 APK 추출");
     }
 
     @Override protected void onDestroy() {
@@ -126,9 +126,13 @@ public class MainActivity extends Activity {
         root.addView(r3);
 
         LinearLayout r4=new LinearLayout(this); r4.setOrientation(LinearLayout.HORIZONTAL);
+        addButton(r4,"Gearhead APK 저장",v->exportGearheadApk());
         addButton(r4,"내부 클래스 덤프",v->dumpInternalClasses());
-        addButton(r4,"초기화",v->{ stopNavigationSafe(); disconnectSafe(); logView.setText(""); });
         root.addView(r4);
+
+        LinearLayout r5=new LinearLayout(this); r5.setOrientation(LinearLayout.HORIZONTAL);
+        addButton(r5,"초기화",v->{ stopNavigationSafe(); disconnectSafe(); logView.setText(""); });
+        root.addView(r5);
 
         logView=new TextView(this);
         logView.setTextColor(0xffe8eaed);
@@ -245,6 +249,55 @@ public class MainActivity extends Activity {
             dumpDeep(token,"connection.a",0,5);
         }catch(Throwable t){
             log("connection.a dump ERROR="+err(t));
+        }
+    }
+
+    private void exportGearheadApk() {
+        section("Gearhead base.apk 추출");
+        try{
+            if(android.os.Build.VERSION.SDK_INT>=23 &&
+                    checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                            != PackageManager.PERMISSION_GRANTED){
+                requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},10001);
+                log("저장소 권한 요청함 → 허용 후 Gearhead APK 저장을 다시 누르세요.");
+                return;
+            }
+
+            ApplicationInfo ai=getPackageManager().getApplicationInfo(GEARHEAD,0);
+            File inFile=new File(ai.sourceDir);
+            log("package="+GEARHEAD);
+            log("sourceDir="+ai.sourceDir);
+            log("source exists="+inFile.exists()+" size="+inFile.length());
+            if(ai.splitSourceDirs!=null){
+                log("splitCount="+ai.splitSourceDirs.length);
+                for(String s:ai.splitSourceDirs){
+                    if(s.contains("arm64") || s.contains("xxhdpi") || s.contains("xxxhdpi"))
+                        log("split="+s);
+                }
+            }
+            if(!inFile.exists()){
+                log("!! Gearhead base.apk 없음");
+                return;
+            }
+
+            File downloads=Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            if(!downloads.exists()) downloads.mkdirs();
+            File out=new File(downloads,"gearhead_17.1.662414_base.apk");
+
+            try(FileInputStream in=new FileInputStream(inFile);
+                FileOutputStream os=new FileOutputStream(out,false)){
+                byte[] buf=new byte[131072];
+                int n;
+                while((n=in.read(buf))>0) os.write(buf,0,n);
+                os.flush();
+            }
+
+            log("★ Gearhead 저장 성공="+out.getAbsolutePath());
+            log("size="+out.length());
+            log("sha256="+sha256(out));
+            Toast.makeText(this,"Download/gearhead_17.1.662414_base.apk 저장 완료",Toast.LENGTH_LONG).show();
+        }catch(Throwable t){
+            log("!! Gearhead APK 저장 ERROR="+err(t));
         }
     }
 

@@ -8,7 +8,7 @@
 
     <application
         android:allowBackup="false"
-        android:label="AI3 HUD Test 0.99"
+        android:label="AI3 HUD Test 1.00"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
