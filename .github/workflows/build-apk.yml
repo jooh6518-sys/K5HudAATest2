@@ -1,9 +1,7 @@
 name: AI3 HUD Probe Build
-
 on:
   push:
     branches: [ "chatgpt-ai3-build" ]
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -16,12 +14,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - name: Build AI3
-        run: gradle --no-daemon :ai3:assembleDebug
-      - name: Rename APK
-        run: cp ai3/build/outputs/apk/debug/ai3-debug.apk ai3_0.95.apk
+      - run: gradle --no-daemon :ai3:assembleDebug
+      - run: cp ai3/build/outputs/apk/debug/ai3-debug.apk ai3_0.96.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: ai3_0.95
-          path: ai3_0.95.apk
+          name: ai3_0.96
+          path: ai3_0.96.apk
           if-no-files-found: error

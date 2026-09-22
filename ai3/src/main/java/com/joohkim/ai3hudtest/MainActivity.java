@@ -3,12 +3,8 @@ package com.joohkim.ai3hudtest;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
-import android.content.ComponentName;
 import android.content.Context;
-import android.content.Intent;
-import android.content.ServiceConnection;
 import android.os.Bundle;
-import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
 import android.view.View;
@@ -18,492 +14,332 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
+import com.google.android.gms.car.CarApi;
+import com.google.android.gms.car.CarApiConnection;
+import com.google.android.gms.car.CarMessageManager;
+import com.google.android.gms.car.CarNavigationStatusManager;
+
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
 public class MainActivity extends Activity {
-    private static final String TAG = "AI3HUD095";
-    private static final String VERSION = "0.95";
-    private static final String GEARHEAD = "com.google.android.projection.gearhead";
-    private static final String GMS = "com.google.android.gms";
-    private static final String STARTUP_SERVICE =
-            "com.google.android.apps.auto.carservice.service.impl.GearheadCarStartupService";
+    private static final String TAG="AI3HUD096";
+    private static final String VERSION="0.96";
+    private static final String GEARHEAD="com.google.android.projection.gearhead";
 
     private TextView logView;
     private ScrollView logScroll;
 
     private Context gearheadContext;
     private ClassLoader gearheadLoader;
-    private ClassLoader gmsLoader;
-    private ClassLoader carLoader;
     private Class<?> dynamicApiFactory;
 
-    private boolean startupBound;
-    private IBinder startupBinder;
+    private CarApiConnection connection;
+    private CarApi carApi;
+    private CarNavigationStatusManager nav;
+    private CarMessageManager focus;
+    private boolean focusOwned;
 
-    private final ServiceConnection startupConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName name, IBinder service) {
-            startupBound = true;
-            startupBinder = service;
-            section("IStartup BINDER CONNECTED");
-            log("component=" + name.flattenToShortString());
-            inspectStartupBinder(service);
+    private final CarApiConnection.ApiConnectionCallback connectionCallback =
+            new CarApiConnection.ApiConnectionCallback() {
+        @Override public void onConnected() {
+            log("★ CarApiConnection.onConnected()");
+            onCarApiConnected();
         }
-
-        @Override
-        public void onServiceDisconnected(ComponentName name) {
-            log("IStartup disconnected=" + name.flattenToShortString());
-            startupBinder = null;
-            startupBound = false;
+        @Override public void onConnectionFailed() {
+            log("!! CarApiConnection.onConnectionFailed()");
         }
-
-        @Override
-        public void onBindingDied(ComponentName name) {
-            log("IStartup bindingDied=" + name.flattenToShortString());
-            startupBinder = null;
-            startupBound = false;
-        }
-
-        @Override
-        public void onNullBinding(ComponentName name) {
-            log("IStartup nullBinding=" + name.flattenToShortString());
-            startupBinder = null;
-            startupBound = false;
+        @Override public void onConnectionSuspended() {
+            log("!! CarApiConnection.onConnectionSuspended()");
         }
     };
 
-    @Override
-    protected void onCreate(Bundle state) {
+    private final CarMessageManager.CarMessageListener messageListener =
+            new CarMessageManager.CarMessageListener() {
+        @Override public void onIntegerMessage(int category, int key, int value) {
+            log("CarMessage onIntegerMessage category="+category+" key="+key+" value="+value);
+        }
+        @Override public void onOwnershipLost(int category) {
+            log("!! CarMessage ownership lost category="+category);
+            if(category==1) focusOwned=false;
+        }
+    };
+
+    @Override protected void onCreate(Bundle state){
         super.onCreate(state);
         buildUi();
-        log("AI3 HUD Probe " + VERSION);
-        log("0.94에서 확인된 GearheadCarStartupService/IStartup 경로 전용");
+        log("AI3 HUD Test "+VERSION);
+        log("실제 CarApiConnection / navigation manager 연결 테스트");
     }
 
-    @Override
-    protected void onDestroy() {
-        unbindStartup();
+    @Override protected void onDestroy(){
+        stopNavigationSafe();
+        disconnectSafe();
         super.onDestroy();
     }
 
-    private void buildUi() {
-        LinearLayout root = new LinearLayout(this);
+    private void buildUi(){
+        LinearLayout root=new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(10), dp(10), dp(10), dp(10));
+        root.setPadding(dp(10),dp(10),dp(10),dp(10));
         root.setBackgroundColor(0xff101114);
 
-        TextView title = new TextView(this);
-        title.setText("AI3 HUD Probe v" + VERSION);
+        TextView title=new TextView(this);
+        title.setText("AI3 HUD Test v"+VERSION);
         title.setTextColor(0xfff1f3f4);
         title.setTextSize(18f);
         root.addView(title);
 
-        LinearLayout r1 = new LinearLayout(this);
-        r1.setOrientation(LinearLayout.HORIZONTAL);
-        addButton(r1, "전체 검사", v -> runFullTest());
-        addButton(r1, "IStartup 재연결", v -> bindStartup());
+        LinearLayout r1=new LinearLayout(this); r1.setOrientation(LinearLayout.HORIZONTAL);
+        addButton(r1,"1. Car API 연결",v->connectCarApi());
+        addButton(r1,"2. 포커스 획득",v->requestNavigationFocus());
         root.addView(r1);
 
-        LinearLayout r2 = new LinearLayout(this);
-        r2.setOrientation(LinearLayout.HORIZONTAL);
-        addButton(r2, "로그 복사", v -> copyLog());
-        addButton(r2, "지우기", v -> logView.setText(""));
+        LinearLayout r2=new LinearLayout(this); r2.setOrientation(LinearLayout.HORIZONTAL);
+        addButton(r2,"3. HUD 테스트",v->sendHudTest());
+        addButton(r2,"4. HUD 종료",v->stopNavigationSafe());
         root.addView(r2);
 
-        logView = new TextView(this);
+        LinearLayout r3=new LinearLayout(this); r3.setOrientation(LinearLayout.HORIZONTAL);
+        addButton(r3,"로그 복사",v->copyLog());
+        addButton(r3,"초기화",v->{ stopNavigationSafe(); disconnectSafe(); logView.setText(""); });
+        root.addView(r3);
+
+        logView=new TextView(this);
         logView.setTextColor(0xffe8eaed);
         logView.setTextSize(11f);
         logView.setTextIsSelectable(true);
-        logView.setPadding(0, dp(8), 0, dp(24));
+        logView.setPadding(0,dp(8),0,dp(24));
 
-        logScroll = new ScrollView(this);
+        logScroll=new ScrollView(this);
         logScroll.addView(logView);
-        root.addView(logScroll, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+        root.addView(logScroll,new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,0,1f));
         setContentView(root);
     }
 
-    private void addButton(LinearLayout row, String text, View.OnClickListener listener) {
-        Button b = new Button(this);
-        b.setText(text);
-        b.setAllCaps(false);
-        b.setOnClickListener(listener);
-        row.addView(b, new LinearLayout.LayoutParams(0, dp(48), 1f));
+    private void addButton(LinearLayout row,String text,View.OnClickListener l){
+        Button b=new Button(this);
+        b.setText(text); b.setAllCaps(false); b.setOnClickListener(l);
+        row.addView(b,new LinearLayout.LayoutParams(0,dp(48),1f));
     }
 
-    private void runFullTest() {
-        unbindStartup();
-        logView.setText("");
-        section("AI3 HUD Probe " + VERSION + " 전체 검사");
-        log("sdk=" + android.os.Build.VERSION.SDK_INT
-                + " device=" + android.os.Build.MANUFACTURER + "/" + android.os.Build.MODEL);
-        prepareDynamicCarApi();
-        inspectApiInterfaces();
-        dumpTargetClasses();
-        bindStartup();
+    private void connectCarApi(){
+        disconnectSafe();
+        section("Car API 연결");
+        try{
+            gearheadContext=createPackageContext(
+                    GEARHEAD,Context.CONTEXT_INCLUDE_CODE|Context.CONTEXT_IGNORE_SECURITY);
+            gearheadLoader=gearheadContext.getClassLoader();
+            dynamicApiFactory=Class.forName(
+                    "com.google.android.gms.car.DynamicApiFactory",false,gearheadLoader);
+            log("DynamicApiFactory="+dynamicApiFactory);
+
+            Method init=dynamicApiFactory.getDeclaredMethod("initialize",Context.class);
+            init.setAccessible(true);
+            init.invoke(null,gearheadContext);
+            log("★ DynamicApiFactory.initialize SUCCESS");
+
+            Method isApi=dynamicApiFactory.getDeclaredMethod("isApiInterface",String.class);
+            isApi.setAccessible(true);
+            for(String n:new String[]{
+                    "com.google.android.gms.car.CarApiConnection",
+                    "com.google.android.gms.car.CarApiConnection$ApiConnectionCallback",
+                    "com.google.android.gms.car.CarApi",
+                    "com.google.android.gms.car.CarMessageManager",
+                    "com.google.android.gms.car.CarNavigationStatusManager"}){
+                try{ log("isApiInterface "+n+" -> "+isApi.invoke(null,n)); }
+                catch(Throwable t){ log("isApiInterface ERR "+n+" -> "+err(t)); }
+            }
+
+            Method make=dynamicApiFactory.getDeclaredMethod(
+                    "newCarApiConnection",Context.class,Object.class,Looper.class);
+            make.setAccessible(true);
+            Object obj=make.invoke(null,this,connectionCallback,Looper.getMainLooper());
+            log("newCarApiConnection result="+obj);
+            if(obj!=null){
+                log("connection class="+obj.getClass().getName());
+                dumpInterfaces(obj.getClass());
+            }
+            if(!(obj instanceof CarApiConnection)){
+                log("!! returned object is NOT CarApiConnection");
+                return;
+            }
+            connection=(CarApiConnection)obj;
+            log("★ CarApiConnection interface match");
+            connection.connect();
+            log("connect() 호출 완료 - callback 대기");
+        }catch(Throwable t){
+            log("!! Car API 연결 ERROR="+err(t));
+        }
     }
 
-    private void prepareDynamicCarApi() {
-        section("DynamicApiFactory initialize");
-        carLoader = null;
-        dynamicApiFactory = null;
+    private void onCarApiConnected(){
+        try{
+            if(connection==null){ log("connection=null"); return; }
+            carApi=connection.getCarApi();
+            log("getCarApi="+carApi);
+            if(carApi==null) return;
+            log("CarApi class="+carApi.getClass().getName());
+            dumpInterfaces(carApi.getClass());
+            log("isConnectedToCar="+carApi.isConnectedToCar());
+            try{ log("connectionType="+carApi.getCarConnectionType()); }
+            catch(Throwable t){ log("getCarConnectionType ERROR="+err(t)); }
 
-        try {
-            gearheadContext = createPackageContext(
-                    GEARHEAD, Context.CONTEXT_INCLUDE_CODE | Context.CONTEXT_IGNORE_SECURITY);
-            gearheadLoader = gearheadContext.getClassLoader();
-            log("Gearhead Context OK=" + gearheadContext);
-            log("Gearhead ClassLoader=" + gearheadLoader);
-        } catch (Throwable t) {
-            log("Gearhead Context ERROR=" + err(t));
+            Object f=carApi.getCarManager("app_focus");
+            log("getCarManager(app_focus)="+f);
+            if(f instanceof CarMessageManager){
+                focus=(CarMessageManager)f;
+                log("★ CarMessageManager 획득");
+                try{ focus.registerMessageListener(messageListener); log("focus listener 등록"); }
+                catch(Throwable t){ log("focus listener ERROR="+err(t)); }
+            }else if(f!=null){
+                log("app_focus class="+f.getClass().getName());
+                dumpInterfaces(f.getClass());
+            }
+
+            Object n=carApi.getCarManager("car_navigation_service");
+            log("getCarManager(car_navigation_service)="+n);
+            if(n instanceof CarNavigationStatusManager){
+                nav=(CarNavigationStatusManager)n;
+                log("★ CarNavigationStatusManager 획득 성공");
+                log("★ 실제 HUD 송신 준비 완료");
+            }else if(n!=null){
+                log("navigation class="+n.getClass().getName());
+                dumpInterfaces(n.getClass());
+            }else{
+                log("!! navigation manager=null");
+            }
+        }catch(Throwable t){
+            log("!! onCarApiConnected ERROR="+err(t));
+        }
+    }
+
+    private void requestNavigationFocus(){
+        section("Navigation Focus");
+        if(focus==null){
+            log("focus manager 없음 → 1. Car API 연결 먼저");
             return;
         }
-
-        try {
-            Context gmsContext = createPackageContext(
-                    GMS, Context.CONTEXT_INCLUDE_CODE | Context.CONTEXT_IGNORE_SECURITY);
-            gmsLoader = gmsContext.getClassLoader();
-            log("GMS ClassLoader=" + gmsLoader);
-        } catch (Throwable t) {
-            log("GMS ClassLoader ERROR=" + err(t));
+        try{
+            boolean ok=focus.acquireCategory(1);
+            log("acquireCategory(1)="+ok);
+            if(ok){
+                focusOwned=true;
+                focus.sendIntegerMessage(1,0,1);
+                log("★ navigation focus 활성 메시지 전송 (1,0,1)");
+            }
+        }catch(Throwable t){
+            log("!! focus ERROR="+err(t));
         }
+    }
 
-        try {
-            dynamicApiFactory = Class.forName(
-                    "com.google.android.gms.car.DynamicApiFactory", false, gearheadLoader);
-            log("★ DynamicApiFactory=" + dynamicApiFactory
-                    + " loader=" + dynamicApiFactory.getClassLoader());
-            dumpClass(dynamicApiFactory, "DynamicApiFactory", true);
-        } catch (Throwable t) {
-            log("DynamicApiFactory LOAD ERROR=" + err(t));
+    private void sendHudTest(){
+        section("HUD 고정값 테스트");
+        if(nav==null){
+            log("navigation manager 없음 → 1. Car API 연결 먼저");
             return;
         }
+        if(!focusOwned){
+            log("focus 미획득 → 먼저 2. 포커스 획득");
+            return;
+        }
+        try{
+            boolean s=nav.sendNavigationStatus(1);
+            log("sendNavigationStatus(ACTIVE=1)="+s);
 
-        Context initializedWith = null;
-        Method initialize = findMethod(dynamicApiFactory, "initialize", Context.class);
-        if (initialize == null) {
-            log("initialize(Context) 메서드 없음");
-        } else {
-            for (Context ctx : new Context[]{gearheadContext, getApplicationContext(), this}) {
-                if (ctx == null) continue;
-                try {
-                    initialize.setAccessible(true);
-                    initialize.invoke(null, ctx);
-                    initializedWith = ctx;
-                    log("★ initialize SUCCESS context=" + describeContext(ctx));
-                    break;
-                } catch (Throwable t) {
-                    log("initialize FAIL context=" + describeContext(ctx) + " -> " + err(t));
+            boolean t=nav.sendNavigationTurnEvent(
+                    4,
+                    "HUD TEST",
+                    -1,
+                    -1,
+                    null,
+                    2);
+            log("sendNavigationTurnEvent(TURN=4, RIGHT=2)="+t);
+
+            boolean d=nav.sendNavigationTurnDistanceEvent(
+                    300,
+                    30,
+                    300000,
+                    1);
+            log("sendNavigationTurnDistanceEvent(300m,30s,meters)="+d);
+            log("★ HUD 테스트 데이터 전송 완료");
+        }catch(Throwable x){
+            log("!! HUD TEST ERROR="+err(x));
+        }
+    }
+
+    private void stopNavigationSafe(){
+        section("HUD / Navigation 종료");
+        if(nav!=null){
+            try{
+                boolean r=nav.sendNavigationStatus(2);
+                log("sendNavigationStatus(INACTIVE=2)="+r);
+            }catch(Throwable t){
+                log("navigation stop ERROR="+err(t));
+            }
+        }
+        if(focus!=null){
+            try{ focus.sendIntegerMessage(1,0,0); log("focus inactive message (1,0,0)"); }
+            catch(Throwable t){ log("focus inactive msg ERROR="+err(t)); }
+            try{ focus.releaseCategory(1); log("releaseCategory(1)"); }
+            catch(Throwable t){ log("releaseCategory ERROR="+err(t)); }
+        }
+        focusOwned=false;
+    }
+
+    private void disconnectSafe(){
+        nav=null;
+        carApi=null;
+        if(focus!=null){
+            try{ focus.unregisterMessageListener(); }catch(Throwable ignored){}
+            try{ focus.releaseCategory(1); }catch(Throwable ignored){}
+        }
+        focus=null;
+        focusOwned=false;
+        if(connection!=null){
+            try{ connection.disconnect(); }catch(Throwable t){ log("disconnect ERROR="+err(t)); }
+        }
+        connection=null;
+    }
+
+    private void dumpInterfaces(Class<?> c){
+        try{
+            Set<String> seen=new LinkedHashSet<>();
+            Class<?> x=c;
+            while(x!=null){
+                for(Class<?> i:x.getInterfaces()){
+                    if(seen.add(i.getName())) log(" interface="+i.getName()+" loader="+i.getClassLoader());
                 }
+                x=x.getSuperclass();
             }
-        }
-
-        Method getter = findMethod(dynamicApiFactory, "getCarApiClassLoader", Context.class);
-        if (getter == null) {
-            log("getCarApiClassLoader(Context) 메서드 없음");
-            return;
-        }
-
-        Set<Context> contexts = new LinkedHashSet<>();
-        if (initializedWith != null) contexts.add(initializedWith);
-        contexts.add(gearheadContext);
-        contexts.add(getApplicationContext());
-        contexts.add(this);
-
-        for (Context ctx : contexts) {
-            if (ctx == null) continue;
-            try {
-                getter.setAccessible(true);
-                Object result = getter.invoke(null, ctx);
-                log("getCarApiClassLoader(" + describeContext(ctx) + ")=" + result);
-                if (result instanceof ClassLoader) {
-                    carLoader = (ClassLoader) result;
-                    log("★ CAR API CLASSLOADER SUCCESS=" + carLoader);
-                    break;
-                }
-            } catch (Throwable t) {
-                log("getCarApiClassLoader FAIL context="
-                        + describeContext(ctx) + " -> " + err(t));
-            }
-        }
-
-        if (carLoader == null) {
-            log("!! CAR API CLASSLOADER 획득 실패");
-        }
+        }catch(Throwable t){ log("dumpInterfaces ERROR="+err(t)); }
     }
 
-    private void inspectApiInterfaces() {
-        section("DynamicApiFactory.isApiInterface");
-        if (dynamicApiFactory == null) {
-            log("DynamicApiFactory 없음");
-            return;
-        }
-        Method isApi = findMethod(dynamicApiFactory, "isApiInterface", String.class);
-        if (isApi == null) {
-            log("isApiInterface(String) 없음");
-            return;
-        }
-        String[] names = targetNames();
-        for (String name : names) {
-            try {
-                isApi.setAccessible(true);
-                Object r = isApi.invoke(null, name);
-                log("isApiInterface " + name + " -> " + r);
-            } catch (Throwable t) {
-                log("isApiInterface ERROR " + name + " -> " + err(t));
-            }
-        }
+    private String err(Throwable t){
+        Throwable x=t; int n=0;
+        while(x!=null && x.getCause()!=null && x.getCause()!=x && n++<12) x=x.getCause();
+        if(x==null) return "null";
+        return x.getClass().getName()+": "+String.valueOf(x.getMessage());
     }
 
-    private void dumpTargetClasses() {
-        section("CAR API CLASS 검사");
-        for (String name : targetNames()) {
-            Class<?> c = loadAny(name);
-            if (c == null) {
-                log("CLASS X " + name);
-            } else {
-                log("★ CLASS OK " + name + " loader=" + c.getClassLoader());
-                dumpClass(c, name, true);
-            }
-        }
+    private void copyLog(){
+        try{
+            ClipboardManager cm=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+            cm.setPrimaryClip(ClipData.newPlainText("AI3 "+VERSION,logView.getText()));
+            Toast.makeText(this,"로그 복사 완료",Toast.LENGTH_SHORT).show();
+        }catch(Throwable t){ log("copy ERROR="+err(t)); }
     }
 
-    private String[] targetNames() {
-        return new String[] {
-                "com.google.android.gms.car.startup.IStartup",
-                "com.google.android.gms.car.startup.IStartup$Stub",
-                "com.google.android.gms.car.ICarProjection",
-                "com.google.android.gms.car.ICarProjection$Stub",
-                "com.google.android.gms.car.ICarNavigationStatus",
-                "com.google.android.gms.car.ICarNavigationStatus$Stub",
-                "com.google.android.gms.car.ICarNavigationStatusEventListener",
-                "com.google.android.gms.car.ICarNavigationStatusEventListener$Stub",
-                "com.google.android.gms.car.CarNavigationStatusManager"
-        };
-    }
-
-    private void bindStartup() {
-        unbindStartup();
-        section("GearheadCarStartupService BIND");
-        Intent i = new Intent();
-        i.setComponent(new ComponentName(GEARHEAD, STARTUP_SERVICE));
-        try {
-            boolean ok = bindService(i, startupConnection, Context.BIND_AUTO_CREATE);
-            log("bindService=" + ok);
-            if (!ok) log("!! IStartup bind 실패");
-        } catch (Throwable t) {
-            log("IStartup BIND ERROR=" + err(t));
-        }
-    }
-
-    private void unbindStartup() {
-        if (!startupBound) return;
-        try {
-            unbindService(startupConnection);
-        } catch (Throwable ignored) {}
-        startupBound = false;
-        startupBinder = null;
-    }
-
-    private void inspectStartupBinder(IBinder binder) {
-        if (binder == null) {
-            log("startup binder=null");
-            return;
-        }
-
-        String descriptor = null;
-        try {
-            descriptor = binder.getInterfaceDescriptor();
-            log("binderClass=" + binder.getClass().getName());
-            log("alive=" + binder.isBinderAlive() + " ping=" + binder.pingBinder());
-            log("★ descriptor=" + descriptor);
-        } catch (Throwable t) {
-            log("Binder metadata ERROR=" + err(t));
-        }
-
-        if (!"com.google.android.gms.car.startup.IStartup".equals(descriptor)) {
-            log("!! 예상 IStartup descriptor와 다름");
-            return;
-        }
-
-        Class<?> iface = loadAny("com.google.android.gms.car.startup.IStartup");
-        Class<?> stub = loadAny("com.google.android.gms.car.startup.IStartup$Stub");
-        log("IStartup class=" + iface);
-        log("IStartup Stub=" + stub);
-
-        if (iface != null) dumpClass(iface, "IStartup(interface)", true);
-        if (stub == null) {
-            log("!! IStartup$Stub 로드 실패 - Car API loader 로그 확인");
-            return;
-        }
-
-        try {
-            Method asInterface = stub.getDeclaredMethod("asInterface", IBinder.class);
-            asInterface.setAccessible(true);
-            Object api = asInterface.invoke(null, binder);
-            log("★ IStartup asInterface SUCCESS proxy="
-                    + (api == null ? "null" : api.getClass().getName()));
-            if (api != null) {
-                dumpClass(api.getClass(), "IStartup proxy", true);
-                Class<?>[] interfaces = api.getClass().getInterfaces();
-                for (Class<?> c : interfaces) {
-                    log("proxy interface=" + c.getName());
-                    dumpClass(c, "proxy interface " + c.getName(), true);
-                }
-            }
-        } catch (Throwable t) {
-            log("IStartup asInterface ERROR=" + err(t));
-        }
-    }
-
-    private Class<?> loadAny(String name) {
-        ClassLoader[] loaders = {carLoader, gearheadLoader, gmsLoader};
-        Set<ClassLoader> seen = new LinkedHashSet<>();
-        for (ClassLoader loader : loaders) {
-            if (loader == null || !seen.add(loader)) continue;
-            try {
-                return Class.forName(name, false, loader);
-            } catch (Throwable ignored) {}
-        }
-        return null;
-    }
-
-    private Method findMethod(Class<?> c, String name, Class<?>... params) {
-        if (c == null) return null;
-        try {
-            return c.getDeclaredMethod(name, params);
-        } catch (Throwable ignored) {
-            try {
-                return c.getMethod(name, params);
-            } catch (Throwable ignored2) {
-                return null;
-            }
-        }
-    }
-
-    private void dumpClass(Class<?> c, String label, boolean dumpFields) {
-        if (c == null) return;
-        log("--- " + label + " ---");
-        try {
-            Class<?> parent = c.getSuperclass();
-            if (parent != null) log(" superclass=" + parent.getName());
-        } catch (Throwable ignored) {}
-        try {
-            for (Class<?> i : c.getInterfaces()) log(" interface=" + i.getName());
-        } catch (Throwable ignored) {}
-        try {
-            for (Class<?> n : c.getDeclaredClasses()) log(" nested=" + n.getName());
-        } catch (Throwable ignored) {}
-        try {
-            Constructor<?>[] cs = c.getDeclaredConstructors();
-            for (int i = 0; i < Math.min(cs.length, 30); i++) {
-                log(" C " + cs[i].toGenericString());
-            }
-        } catch (Throwable t) {
-            log(" constructors ERROR=" + err(t));
-        }
-        try {
-            Method[] ms = c.getDeclaredMethods();
-            for (int i = 0; i < Math.min(ms.length, 160); i++) {
-                log(" M " + methodSig(ms[i]));
-            }
-            if (ms.length > 160) log(" ... methods=" + ms.length);
-        } catch (Throwable t) {
-            log(" methods ERROR=" + err(t));
-        }
-        if (!dumpFields) return;
-        try {
-            Field[] fs = c.getDeclaredFields();
-            int printed = 0;
-            for (Field f : fs) {
-                if (printed >= 100) break;
-                String name = f.getName();
-                boolean interesting = name.startsWith("TRANSACTION_")
-                        || name.toLowerCase().contains("navigation")
-                        || name.toLowerCase().contains("service")
-                        || name.toLowerCase().contains("startup")
-                        || name.toLowerCase().contains("status")
-                        || name.toLowerCase().contains("turn")
-                        || f.getType().isPrimitive()
-                        || f.getType() == String.class;
-                if (!interesting) continue;
-                String value = "(instance)";
-                if (Modifier.isStatic(f.getModifiers())) {
-                    try {
-                        f.setAccessible(true);
-                        value = String.valueOf(f.get(null));
-                    } catch (Throwable t) {
-                        value = "(unreadable)";
-                    }
-                }
-                log(" F " + f.getType().getSimpleName() + " " + name + "=" + value);
-                printed++;
-            }
-        } catch (Throwable t) {
-            log(" fields ERROR=" + err(t));
-        }
-    }
-
-    private String methodSig(Method m) {
-        try {
-            return m.toGenericString();
-        } catch (Throwable ignored) {
-            return m.toString();
-        }
-    }
-
-    private String describeContext(Context c) {
-        if (c == null) return "null";
-        try {
-            return c.getPackageName() + "/" + c.getClass().getName();
-        } catch (Throwable t) {
-            return c.getClass().getName();
-        }
-    }
-
-    private String err(Throwable t) {
-        if (t == null) return "null";
-        Throwable x = t;
-        int guard = 0;
-        while (x.getCause() != null && x.getCause() != x && guard++ < 12) {
-            x = x.getCause();
-        }
-        String msg = x.getMessage();
-        return x.getClass().getName() + (msg == null ? "" : ": " + msg);
-    }
-
-    private void copyLog() {
-        try {
-            ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-            cm.setPrimaryClip(ClipData.newPlainText(
-                    "AI3 HUD Probe " + VERSION, logView.getText()));
-            Toast.makeText(this, "로그 복사 완료", Toast.LENGTH_SHORT).show();
-        } catch (Throwable t) {
-            log("로그 복사 ERROR=" + err(t));
-        }
-    }
-
-    private int dp(int n) {
-        return Math.round(n * getResources().getDisplayMetrics().density);
-    }
-
-    private void section(String title) {
-        log("\n=== " + title + " ===");
-    }
-
-    private void log(String s) {
-        Log.d(TAG, s);
-        if (logView == null) return;
-        runOnUiThread(() -> {
-            logView.append(s + "\n");
-            if (logScroll != null) {
-                logScroll.post(() -> logScroll.fullScroll(View.FOCUS_DOWN));
-            }
+    private void section(String s){ log("\n=== "+s+" ==="); }
+    private void log(String s){
+        Log.d(TAG,s);
+        if(logView==null) return;
+        runOnUiThread(()->{
+            logView.append(s+"\n");
+            if(logScroll!=null) logScroll.post(()->logScroll.fullScroll(View.FOCUS_DOWN));
         });
     }
+    private int dp(int n){ return Math.round(n*getResources().getDisplayMetrics().density); }
 }

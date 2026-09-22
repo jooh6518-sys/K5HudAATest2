@@ -1,6 +1,4 @@
-plugins {
-    id 'com.android.application'
-}
+plugins { id 'com.android.application' }
 
 android {
     namespace 'com.joohkim.ai3hudtest'
@@ -19,8 +17,8 @@ android {
         applicationId 'com.joohkim.ai3hudtest'
         minSdk 23
         targetSdk 28
-        versionCode 95
-        versionName '0.95'
+        versionCode 96
+        versionName '0.96'
     }
 
     buildTypes {
@@ -28,9 +26,7 @@ android {
             debuggable true
             signingConfig signingConfigs.ai3test
         }
-        release {
-            minifyEnabled false
-        }
+        release { minifyEnabled false }
     }
 
     compileOptions {
