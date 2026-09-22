@@ -9,6 +9,8 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.Environment;
+import android.Manifest;
 import android.os.Looper;
 import android.util.Log;
 import android.view.View;
@@ -23,6 +25,10 @@ import com.google.android.gms.car.CarApiConnection;
 import com.google.android.gms.car.CarMessageManager;
 import com.google.android.gms.car.CarNavigationStatusManager;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.security.MessageDigest;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -31,8 +37,8 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 public class MainActivity extends Activity {
-    private static final String TAG="AI3HUD098";
-    private static final String VERSION="0.98";
+    private static final String TAG="AI3HUD099";
+    private static final String VERSION="0.99";
     private static final String GEARHEAD="com.google.android.projection.gearhead";
 
     private TextView logView;
@@ -83,7 +89,7 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         buildUi();
         log("AI3 HUD Test "+VERSION);
-        log("AA navigation manifest + CarApi handshake deep diagnostic");
+        log("CarApi 접근 거부 진단 + 실제 sdk_impl.jar 추출");
     }
 
     @Override protected void onDestroy() {
@@ -115,9 +121,14 @@ public class MainActivity extends Activity {
         root.addView(r2);
 
         LinearLayout r3=new LinearLayout(this); r3.setOrientation(LinearLayout.HORIZONTAL);
+        addButton(r3,"SDK JAR 저장",v->exportSdkJar());
         addButton(r3,"로그 복사",v->copyLog());
-        addButton(r3,"초기화",v->{ stopNavigationSafe(); disconnectSafe(); logView.setText(""); });
         root.addView(r3);
+
+        LinearLayout r4=new LinearLayout(this); r4.setOrientation(LinearLayout.HORIZONTAL);
+        addButton(r4,"내부 클래스 덤프",v->dumpInternalClasses());
+        addButton(r4,"초기화",v->{ stopNavigationSafe(); disconnectSafe(); logView.setText(""); });
+        root.addView(r4);
 
         logView=new TextView(this);
         logView.setTextColor(0xffe8eaed);
@@ -181,6 +192,7 @@ public class MainActivity extends Activity {
                 dumpClassShape(obj.getClass(),"connection-class");
                 visited.clear();
                 dumpDeep(obj,"connection-created",0,3);
+                dumpKnownNestedClasses(obj);
             }
 
             if(!(obj instanceof CarApiConnection)) {
@@ -194,6 +206,102 @@ public class MainActivity extends Activity {
             log("connect() 호출 완료 - callback 대기");
         } catch(Throwable t) {
             log("!! Car API 연결 ERROR="+err(t));
+        }
+    }
+
+    private void dumpKnownNestedClasses(Object obj) {
+        section("Known internal class shapes");
+        String[] names={
+                "com.google.android.gms.car.a.a.ai",
+                "com.google.android.gms.car.a.h",
+                "com.google.android.gms.car.y",
+                "com.google.android.gms.car.z",
+                "com.google.android.gms.car.internal.CarApiImpl",
+                "com.google.android.gms.car.internal.CarApiConnectionImpl"
+        };
+        ClassLoader cl = obj==null ? null : obj.getClass().getClassLoader();
+        for(String n:names){
+            try{
+                Class<?> c=Class.forName(n,false,cl);
+                dumpClassShape(c,n);
+            }catch(Throwable t){
+                log("CLASS X "+n+" -> "+err(t));
+            }
+        }
+    }
+
+    private void dumpInternalClasses() {
+        section("내부 클래스 수동 덤프");
+        if(connection==null){
+            log("connection 없음 → 1. Car API 연결 먼저");
+            return;
+        }
+        dumpKnownNestedClasses(connection);
+        try{
+            Field f=connection.getClass().getDeclaredField("a");
+            f.setAccessible(true);
+            Object token=f.get(connection);
+            visited.clear();
+            dumpDeep(token,"connection.a",0,5);
+        }catch(Throwable t){
+            log("connection.a dump ERROR="+err(t));
+        }
+    }
+
+    private void exportSdkJar() {
+        section("sdk_impl.jar 추출");
+        try{
+            if(android.os.Build.VERSION.SDK_INT>=23 &&
+                    checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                            != PackageManager.PERMISSION_GRANTED){
+                requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},9901);
+                log("저장소 권한 요청함 → 허용 후 SDK JAR 저장을 다시 누르세요.");
+                return;
+            }
+
+            File srcJar=new File(getDir("car_sdk_impl",MODE_PRIVATE),"sdk_impl.jar");
+            log("source="+srcJar.getAbsolutePath());
+            log("source exists="+srcJar.exists()+" size="+srcJar.length());
+            if(!srcJar.exists()){
+                log("!! sdk_impl.jar 없음 → 먼저 1. Car API 연결을 눌러 initialize 하세요.");
+                return;
+            }
+
+            File downloads=Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            if(!downloads.exists()) downloads.mkdirs();
+            File out=new File(downloads,"ai3_sdk_impl_0.99.jar");
+
+            try(FileInputStream in=new FileInputStream(srcJar);
+                FileOutputStream os=new FileOutputStream(out,false)){
+                byte[] buf=new byte[65536];
+                int n;
+                while((n=in.read(buf))>0) os.write(buf,0,n);
+                os.flush();
+            }
+
+            log("★ 저장 성공="+out.getAbsolutePath());
+            log("size="+out.length());
+            log("sha256="+sha256(out));
+            Toast.makeText(this,"Download/ai3_sdk_impl_0.99.jar 저장 완료",Toast.LENGTH_LONG).show();
+        }catch(Throwable t){
+            log("!! JAR 저장 ERROR="+err(t));
+        }
+    }
+
+    private String sha256(File file) {
+        try{
+            MessageDigest md=MessageDigest.getInstance("SHA-256");
+            try(FileInputStream in=new FileInputStream(file)){
+                byte[] b=new byte[65536];
+                int n;
+                while((n=in.read(b))>0) md.update(b,0,n);
+            }
+            byte[] d=md.digest();
+            StringBuilder sb=new StringBuilder();
+            for(byte x:d) sb.append(String.format("%02x",x & 0xff));
+            return sb.toString();
+        }catch(Throwable t){
+            return "ERROR:"+err(t);
         }
     }
 
