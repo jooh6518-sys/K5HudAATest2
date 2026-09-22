@@ -15,9 +15,9 @@ jobs:
         with:
           gradle-version: '8.13'
       - run: gradle --no-daemon :ai3:assembleDebug
-      - run: cp ai3/build/outputs/apk/debug/ai3-debug.apk ai3_0.97.apk
+      - run: cp ai3/build/outputs/apk/debug/ai3-debug.apk ai3_0.98.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: ai3_0.97
-          path: ai3_0.97.apk
+          name: ai3_0.98
+          path: ai3_0.98.apk
           if-no-files-found: error

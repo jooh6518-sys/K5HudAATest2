@@ -4,11 +4,21 @@
         <package android:name="com.google.android.projection.gearhead"/>
         <package android:name="com.google.android.gms"/>
     </queries>
+
     <application
         android:allowBackup="false"
-        android:label="AI3 HUD Test 0.97"
+        android:label="AI3 HUD Test 0.98"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
+
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
+        <meta-data
+            android:name="androidx.car.app.minCarApiLevel"
+            android:value="1" />
+
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
