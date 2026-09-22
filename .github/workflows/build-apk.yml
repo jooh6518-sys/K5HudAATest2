@@ -1,44 +1,27 @@
-name: Build Android Packages
+name: AI3 HUD Probe Build
 
 on:
-  workflow_dispatch:
   push:
-    branches: [ "main" ]
+    branches: [ "chatgpt-ai3-build" ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
-      - name: Build phone test
-        run: gradle --no-daemon :app:assembleDebug :app:bundleDebug
-      - name: Build AI3 Projection probe
+      - name: Build AI3
         run: gradle --no-daemon :ai3:assembleDebug
-      - name: Upload phone APK
-        uses: actions/upload-artifact@v4
+      - name: Rename APK
+        run: cp ai3/build/outputs/apk/debug/ai3-debug.apk ai3_0.95.apk
+      - uses: actions/upload-artifact@v4
         with:
-          name: K5HudAATest-v0.6-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-      - name: Upload phone AAB
-        uses: actions/upload-artifact@v4
-        with:
-          name: K5HudAATest-v0.6-debug-aab
-          path: app/build/outputs/bundle/debug/app-debug.aab
-          if-no-files-found: error
-      - name: Upload AI3 APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: AI3HudProjectionProbe-v0.4-debug-apk
-          path: ai3/build/outputs/apk/debug/ai3-debug.apk
+          name: ai3_0.95
+          path: ai3_0.95.apk
           if-no-files-found: error

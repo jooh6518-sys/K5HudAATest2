@@ -6,17 +6,31 @@ android {
     namespace 'com.joohkim.ai3hudtest'
     compileSdk 36
 
+    signingConfigs {
+        ai3test {
+            storeFile file('test-debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
     defaultConfig {
         applicationId 'com.joohkim.ai3hudtest'
-        minSdk 26
+        minSdk 23
         targetSdk 28
-        versionCode 4
-        versionName '0.4-ai3'
+        versionCode 95
+        versionName '0.95'
     }
 
     buildTypes {
-        debug { debuggable true }
-        release { minifyEnabled false }
+        debug {
+            debuggable true
+            signingConfig signingConfigs.ai3test
+        }
+        release {
+            minifyEnabled false
+        }
     }
 
     compileOptions {

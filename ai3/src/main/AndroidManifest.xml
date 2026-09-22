@@ -1,21 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.ACCESS_SUPERUSER" />
-
     <queries>
-        <package android:name="com.nitromirror.homescreen" />
         <package android:name="com.google.android.projection.gearhead" />
+        <package android:name="com.google.android.gms" />
     </queries>
-
     <application
         android:allowBackup="false"
-        android:label="AI3 HUD Test"
+        android:label="AI3 HUD Probe 0.95"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
-
-        <activity
-            android:name=".MainActivity"
-            android:exported="true">
+        <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

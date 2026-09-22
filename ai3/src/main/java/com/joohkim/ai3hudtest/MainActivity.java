@@ -1,62 +1,79 @@
 package com.joohkim.ai3hudtest;
 
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageInfo;
-import android.content.pm.ServiceInfo;
 import android.os.Bundle;
 import android.os.IBinder;
-import android.text.method.ScrollingMovementMethod;
+import android.os.Looper;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 public class MainActivity extends Activity {
-    private static final String NITRO_PACKAGE = "com.nitromirror.homescreen";
-    private static final String NITRO_SERVICE = "com.nitromirror.homescreen.services.CarService";
-    private static final String[] PROJECTION_PACKAGES = new String[] {
-            "com.google.android.projection.bumblebee",
-            "com.google.android.projection.gearhead"
-    };
+    private static final String TAG = "AI3HUD095";
+    private static final String VERSION = "0.95";
+    private static final String GEARHEAD = "com.google.android.projection.gearhead";
+    private static final String GMS = "com.google.android.gms";
+    private static final String STARTUP_SERVICE =
+            "com.google.android.apps.auto.carservice.service.impl.GearheadCarStartupService";
 
-    private TextView status;
-    private IBinder nitroBinder;
-    private boolean bound;
+    private TextView logView;
+    private ScrollView logScroll;
 
-    private final ServiceConnection conn = new ServiceConnection() {
+    private Context gearheadContext;
+    private ClassLoader gearheadLoader;
+    private ClassLoader gmsLoader;
+    private ClassLoader carLoader;
+    private Class<?> dynamicApiFactory;
+
+    private boolean startupBound;
+    private IBinder startupBinder;
+
+    private final ServiceConnection startupConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
-            bound = true;
-            nitroBinder = service;
-            log("★ Nitro CarService BIND 성공");
+            startupBound = true;
+            startupBinder = service;
+            section("IStartup BINDER CONNECTED");
             log("component=" + name.flattenToShortString());
-            try { log("descriptor=" + service.getInterfaceDescriptor()); }
-            catch (Throwable t) { log("descriptor 실패: " + err(t)); }
-            log("alive=" + service.isBinderAlive() + " · ping=" + service.pingBinder());
-            log("→ 3번 Projection 패키지 AIDL 분석을 누르세요.");
+            inspectStartupBinder(service);
         }
 
-        @Override public void onServiceDisconnected(ComponentName name) {
-            log("Nitro CarService 연결 끊김");
-            bound = false; nitroBinder = null;
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            log("IStartup disconnected=" + name.flattenToShortString());
+            startupBinder = null;
+            startupBound = false;
         }
-        @Override public void onBindingDied(ComponentName name) {
-            log("Nitro CarService binding died");
-            bound = false; nitroBinder = null;
+
+        @Override
+        public void onBindingDied(ComponentName name) {
+            log("IStartup bindingDied=" + name.flattenToShortString());
+            startupBinder = null;
+            startupBound = false;
         }
-        @Override public void onNullBinding(ComponentName name) {
-            log("Nitro CarService NULL binding");
-            bound = false; nitroBinder = null;
+
+        @Override
+        public void onNullBinding(ComponentName name) {
+            log("IStartup nullBinding=" + name.flattenToShortString());
+            startupBinder = null;
+            startupBound = false;
         }
     };
 
@@ -64,235 +81,429 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         buildUi();
-        log("AI3 HUD Projection Probe 0.4");
-        log("Nitro가 실제로 로드하는 Android Auto projection 패키지에서 AIDL 구조를 읽습니다.");
-        inspectEnvironment();
-    }
-
-    private void buildUi() {
-        ScrollView outer = new ScrollView(this);
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        int p = dp(12);
-        root.setPadding(p, p, p, p);
-        outer.addView(root);
-
-        TextView title = new TextView(this);
-        title.setText("AI3 · Projection AIDL Probe v0.4");
-        title.setTextSize(21);
-        root.addView(title);
-
-        addButton(root, "1. 환경 / Projection 패키지 확인", v -> inspectEnvironment());
-        addButton(root, "2. Nitro CarService BIND", v -> bindNitro());
-        addButton(root, "3. Projection 패키지 AIDL 분석", v -> inspectProjectionPackages());
-        addButton(root, "4. Binder 재확인", v -> inspectBinder());
-        addButton(root, "연결 해제", v -> unbindNitro());
-
-        status = new TextView(this);
-        status.setTextSize(10);
-        status.setTextIsSelectable(true);
-        status.setMovementMethod(new ScrollingMovementMethod());
-        status.setPadding(0, dp(12), 0, dp(24));
-        root.addView(status);
-
-        setContentView(outer);
-    }
-
-    private void addButton(LinearLayout root, String text, View.OnClickListener l) {
-        Button b = new Button(this);
-        b.setText(text);
-        b.setAllCaps(false);
-        b.setOnClickListener(l);
-        root.addView(b, new LinearLayout.LayoutParams(-1, -2));
-    }
-
-    private void inspectEnvironment() {
-        log("--- 환경 검사 ---");
-        try {
-            PackageInfo pi = getPackageManager().getPackageInfo(NITRO_PACKAGE, 0);
-            log("NitroAAutoMirror=" + pi.versionName + " (" + pi.versionCode + ")");
-            ServiceInfo si = getPackageManager().getServiceInfo(
-                    new ComponentName(NITRO_PACKAGE, NITRO_SERVICE), 0);
-            log("CarService exported=" + si.exported + " permission=" + si.permission);
-        } catch (Throwable t) {
-            log("Nitro 확인 실패: " + err(t));
-        }
-
-        for (String pkg : PROJECTION_PACKAGES) {
-            try {
-                PackageInfo pi = getPackageManager().getPackageInfo(pkg, 0);
-                ApplicationInfo ai = pi.applicationInfo;
-                log("★ Projection 설치됨: " + pkg);
-                log("  version=" + pi.versionName + " (" + pi.versionCode + ")");
-                log("  sourceDir=" + ai.sourceDir);
-                if (ai.splitSourceDirs != null) {
-                    for (String s : ai.splitSourceDirs) log("  split=" + s);
-                }
-            } catch (Throwable t) {
-                log("Projection 없음: " + pkg + " · " + t.getClass().getSimpleName());
-            }
-        }
-    }
-
-    private void bindNitro() {
-        if (bound) {
-            log("이미 BIND 상태입니다.");
-            return;
-        }
-        try {
-            Intent i = new Intent("android.intent.action.MAIN");
-            i.setComponent(new ComponentName(NITRO_PACKAGE, NITRO_SERVICE));
-            log("--- Nitro BIND 시작 ---");
-            boolean ok = bindService(i, conn, Context.BIND_AUTO_CREATE);
-            log("bindService()=" + ok);
-        } catch (Throwable t) {
-            log("BIND 예외: " + err(t));
-        }
-    }
-
-    private void inspectProjectionPackages() {
-        log("--- Projection 패키지 AIDL 분석 ---");
-        for (String pkg : PROJECTION_PACKAGES) {
-            try {
-                PackageInfo pi = getPackageManager().getPackageInfo(pkg, 0);
-                Context pc = createPackageContext(pkg,
-                        Context.CONTEXT_INCLUDE_CODE | Context.CONTEXT_IGNORE_SECURITY);
-                ClassLoader cl = pc.getClassLoader();
-
-                log("====== " + pkg + " " + pi.versionName + " ======");
-                log("ClassLoader=" + cl);
-
-                inspectClass(cl, "com.google.android.gms.car.DynamicApiFactory", true);
-                inspectClass(cl, "com.google.android.gms.car.ICarProjection", true);
-                inspectClass(cl, "com.google.android.gms.car.ICarProjection$Stub", true);
-                inspectClass(cl, "com.google.android.gms.car.ICarNavigationStatus", true);
-                inspectClass(cl, "com.google.android.gms.car.ICarNavigationStatus$Stub", true);
-                inspectClass(cl, "com.google.android.gms.car.ICarNavigationStatusEventListener", false);
-                inspectClass(cl, "com.google.android.gms.car.CarNavigationStatusManager", false);
-
-            } catch (Throwable t) {
-                log(pkg + " 분석 실패: " + fullErr(t));
-            }
-        }
-    }
-
-    private void inspectClass(ClassLoader cl, String name, boolean dumpTransactions) {
-        try {
-            Class<?> c = Class.forName(name, false, cl);
-            log("★ CLASS " + name);
-            dumpMethods(c);
-            if (dumpTransactions) dumpTransactionFields(c);
-
-            if (name.endsWith("$Stub") && nitroBinder != null &&
-                    name.equals("com.google.android.gms.car.ICarProjection$Stub")) {
-                try {
-                    Method m = c.getDeclaredMethod("asInterface", IBinder.class);
-                    m.setAccessible(true);
-                    Object proxy = m.invoke(null, nitroBinder);
-                    log("  asInterface(nitroBinder)=" +
-                            (proxy == null ? "null" : proxy.getClass().getName()));
-                    if (proxy != null) dumpMethods(proxy.getClass());
-                } catch (Throwable t) {
-                    log("  asInterface 실패: " + fullErr(t));
-                }
-            }
-        } catch (Throwable t) {
-            log("CLASS 없음: " + name + " · " + err(t));
-        }
-    }
-
-    private void dumpMethods(Class<?> c) {
-        Method[] ms;
-        try { ms = c.getDeclaredMethods(); }
-        catch (Throwable t) { log("  methods 읽기 실패: " + err(t)); return; }
-
-        int n = 0;
-        for (Method m : ms) {
-            StringBuilder s = new StringBuilder("  ");
-            if (Modifier.isStatic(m.getModifiers())) s.append("static ");
-            s.append(m.getReturnType().getSimpleName()).append(" ");
-            s.append(m.getName()).append("(");
-            Class<?>[] ps = m.getParameterTypes();
-            for (int i = 0; i < ps.length; i++) {
-                if (i > 0) s.append(",");
-                s.append(ps[i].getSimpleName());
-            }
-            s.append(")");
-            log(s.toString());
-            if (++n >= 120) {
-                log("  ... method 출력 제한");
-                break;
-            }
-        }
-    }
-
-    private void dumpTransactionFields(Class<?> c) {
-        int n = 0;
-        for (Field f : c.getDeclaredFields()) {
-            if (!f.getName().startsWith("TRANSACTION_")) continue;
-            try {
-                f.setAccessible(true);
-                log("  " + f.getName() + "=" + f.get(null));
-                n++;
-            } catch (Throwable ignored) {}
-        }
-        if (n == 0) log("  TRANSACTION_* 필드 없음/난독화");
-    }
-
-    private void inspectBinder() {
-        if (nitroBinder == null) {
-            log("Binder 없음 → 2번 먼저 실행");
-            return;
-        }
-        try {
-            log("descriptor=" + nitroBinder.getInterfaceDescriptor());
-            log("alive=" + nitroBinder.isBinderAlive() + " ping=" + nitroBinder.pingBinder());
-        } catch (Throwable t) {
-            log("Binder 확인 실패: " + err(t));
-        }
-    }
-
-    private void unbindNitro() {
-        if (!bound) return;
-        try { unbindService(conn); } catch (Throwable ignored) {}
-        bound = false; nitroBinder = null;
-        log("Nitro CarService unbind 완료");
+        log("AI3 HUD Probe " + VERSION);
+        log("0.94에서 확인된 GearheadCarStartupService/IStartup 경로 전용");
     }
 
     @Override
     protected void onDestroy() {
-        if (bound) {
-            try { unbindService(conn); } catch (Throwable ignored) {}
-        }
+        unbindStartup();
         super.onDestroy();
+    }
+
+    private void buildUi() {
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(10), dp(10), dp(10), dp(10));
+        root.setBackgroundColor(0xff101114);
+
+        TextView title = new TextView(this);
+        title.setText("AI3 HUD Probe v" + VERSION);
+        title.setTextColor(0xfff1f3f4);
+        title.setTextSize(18f);
+        root.addView(title);
+
+        LinearLayout r1 = new LinearLayout(this);
+        r1.setOrientation(LinearLayout.HORIZONTAL);
+        addButton(r1, "전체 검사", v -> runFullTest());
+        addButton(r1, "IStartup 재연결", v -> bindStartup());
+        root.addView(r1);
+
+        LinearLayout r2 = new LinearLayout(this);
+        r2.setOrientation(LinearLayout.HORIZONTAL);
+        addButton(r2, "로그 복사", v -> copyLog());
+        addButton(r2, "지우기", v -> logView.setText(""));
+        root.addView(r2);
+
+        logView = new TextView(this);
+        logView.setTextColor(0xffe8eaed);
+        logView.setTextSize(11f);
+        logView.setTextIsSelectable(true);
+        logView.setPadding(0, dp(8), 0, dp(24));
+
+        logScroll = new ScrollView(this);
+        logScroll.addView(logView);
+        root.addView(logScroll, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+        setContentView(root);
+    }
+
+    private void addButton(LinearLayout row, String text, View.OnClickListener listener) {
+        Button b = new Button(this);
+        b.setText(text);
+        b.setAllCaps(false);
+        b.setOnClickListener(listener);
+        row.addView(b, new LinearLayout.LayoutParams(0, dp(48), 1f));
+    }
+
+    private void runFullTest() {
+        unbindStartup();
+        logView.setText("");
+        section("AI3 HUD Probe " + VERSION + " 전체 검사");
+        log("sdk=" + android.os.Build.VERSION.SDK_INT
+                + " device=" + android.os.Build.MANUFACTURER + "/" + android.os.Build.MODEL);
+        prepareDynamicCarApi();
+        inspectApiInterfaces();
+        dumpTargetClasses();
+        bindStartup();
+    }
+
+    private void prepareDynamicCarApi() {
+        section("DynamicApiFactory initialize");
+        carLoader = null;
+        dynamicApiFactory = null;
+
+        try {
+            gearheadContext = createPackageContext(
+                    GEARHEAD, Context.CONTEXT_INCLUDE_CODE | Context.CONTEXT_IGNORE_SECURITY);
+            gearheadLoader = gearheadContext.getClassLoader();
+            log("Gearhead Context OK=" + gearheadContext);
+            log("Gearhead ClassLoader=" + gearheadLoader);
+        } catch (Throwable t) {
+            log("Gearhead Context ERROR=" + err(t));
+            return;
+        }
+
+        try {
+            Context gmsContext = createPackageContext(
+                    GMS, Context.CONTEXT_INCLUDE_CODE | Context.CONTEXT_IGNORE_SECURITY);
+            gmsLoader = gmsContext.getClassLoader();
+            log("GMS ClassLoader=" + gmsLoader);
+        } catch (Throwable t) {
+            log("GMS ClassLoader ERROR=" + err(t));
+        }
+
+        try {
+            dynamicApiFactory = Class.forName(
+                    "com.google.android.gms.car.DynamicApiFactory", false, gearheadLoader);
+            log("★ DynamicApiFactory=" + dynamicApiFactory
+                    + " loader=" + dynamicApiFactory.getClassLoader());
+            dumpClass(dynamicApiFactory, "DynamicApiFactory", true);
+        } catch (Throwable t) {
+            log("DynamicApiFactory LOAD ERROR=" + err(t));
+            return;
+        }
+
+        Context initializedWith = null;
+        Method initialize = findMethod(dynamicApiFactory, "initialize", Context.class);
+        if (initialize == null) {
+            log("initialize(Context) 메서드 없음");
+        } else {
+            for (Context ctx : new Context[]{gearheadContext, getApplicationContext(), this}) {
+                if (ctx == null) continue;
+                try {
+                    initialize.setAccessible(true);
+                    initialize.invoke(null, ctx);
+                    initializedWith = ctx;
+                    log("★ initialize SUCCESS context=" + describeContext(ctx));
+                    break;
+                } catch (Throwable t) {
+                    log("initialize FAIL context=" + describeContext(ctx) + " -> " + err(t));
+                }
+            }
+        }
+
+        Method getter = findMethod(dynamicApiFactory, "getCarApiClassLoader", Context.class);
+        if (getter == null) {
+            log("getCarApiClassLoader(Context) 메서드 없음");
+            return;
+        }
+
+        Set<Context> contexts = new LinkedHashSet<>();
+        if (initializedWith != null) contexts.add(initializedWith);
+        contexts.add(gearheadContext);
+        contexts.add(getApplicationContext());
+        contexts.add(this);
+
+        for (Context ctx : contexts) {
+            if (ctx == null) continue;
+            try {
+                getter.setAccessible(true);
+                Object result = getter.invoke(null, ctx);
+                log("getCarApiClassLoader(" + describeContext(ctx) + ")=" + result);
+                if (result instanceof ClassLoader) {
+                    carLoader = (ClassLoader) result;
+                    log("★ CAR API CLASSLOADER SUCCESS=" + carLoader);
+                    break;
+                }
+            } catch (Throwable t) {
+                log("getCarApiClassLoader FAIL context="
+                        + describeContext(ctx) + " -> " + err(t));
+            }
+        }
+
+        if (carLoader == null) {
+            log("!! CAR API CLASSLOADER 획득 실패");
+        }
+    }
+
+    private void inspectApiInterfaces() {
+        section("DynamicApiFactory.isApiInterface");
+        if (dynamicApiFactory == null) {
+            log("DynamicApiFactory 없음");
+            return;
+        }
+        Method isApi = findMethod(dynamicApiFactory, "isApiInterface", String.class);
+        if (isApi == null) {
+            log("isApiInterface(String) 없음");
+            return;
+        }
+        String[] names = targetNames();
+        for (String name : names) {
+            try {
+                isApi.setAccessible(true);
+                Object r = isApi.invoke(null, name);
+                log("isApiInterface " + name + " -> " + r);
+            } catch (Throwable t) {
+                log("isApiInterface ERROR " + name + " -> " + err(t));
+            }
+        }
+    }
+
+    private void dumpTargetClasses() {
+        section("CAR API CLASS 검사");
+        for (String name : targetNames()) {
+            Class<?> c = loadAny(name);
+            if (c == null) {
+                log("CLASS X " + name);
+            } else {
+                log("★ CLASS OK " + name + " loader=" + c.getClassLoader());
+                dumpClass(c, name, true);
+            }
+        }
+    }
+
+    private String[] targetNames() {
+        return new String[] {
+                "com.google.android.gms.car.startup.IStartup",
+                "com.google.android.gms.car.startup.IStartup$Stub",
+                "com.google.android.gms.car.ICarProjection",
+                "com.google.android.gms.car.ICarProjection$Stub",
+                "com.google.android.gms.car.ICarNavigationStatus",
+                "com.google.android.gms.car.ICarNavigationStatus$Stub",
+                "com.google.android.gms.car.ICarNavigationStatusEventListener",
+                "com.google.android.gms.car.ICarNavigationStatusEventListener$Stub",
+                "com.google.android.gms.car.CarNavigationStatusManager"
+        };
+    }
+
+    private void bindStartup() {
+        unbindStartup();
+        section("GearheadCarStartupService BIND");
+        Intent i = new Intent();
+        i.setComponent(new ComponentName(GEARHEAD, STARTUP_SERVICE));
+        try {
+            boolean ok = bindService(i, startupConnection, Context.BIND_AUTO_CREATE);
+            log("bindService=" + ok);
+            if (!ok) log("!! IStartup bind 실패");
+        } catch (Throwable t) {
+            log("IStartup BIND ERROR=" + err(t));
+        }
+    }
+
+    private void unbindStartup() {
+        if (!startupBound) return;
+        try {
+            unbindService(startupConnection);
+        } catch (Throwable ignored) {}
+        startupBound = false;
+        startupBinder = null;
+    }
+
+    private void inspectStartupBinder(IBinder binder) {
+        if (binder == null) {
+            log("startup binder=null");
+            return;
+        }
+
+        String descriptor = null;
+        try {
+            descriptor = binder.getInterfaceDescriptor();
+            log("binderClass=" + binder.getClass().getName());
+            log("alive=" + binder.isBinderAlive() + " ping=" + binder.pingBinder());
+            log("★ descriptor=" + descriptor);
+        } catch (Throwable t) {
+            log("Binder metadata ERROR=" + err(t));
+        }
+
+        if (!"com.google.android.gms.car.startup.IStartup".equals(descriptor)) {
+            log("!! 예상 IStartup descriptor와 다름");
+            return;
+        }
+
+        Class<?> iface = loadAny("com.google.android.gms.car.startup.IStartup");
+        Class<?> stub = loadAny("com.google.android.gms.car.startup.IStartup$Stub");
+        log("IStartup class=" + iface);
+        log("IStartup Stub=" + stub);
+
+        if (iface != null) dumpClass(iface, "IStartup(interface)", true);
+        if (stub == null) {
+            log("!! IStartup$Stub 로드 실패 - Car API loader 로그 확인");
+            return;
+        }
+
+        try {
+            Method asInterface = stub.getDeclaredMethod("asInterface", IBinder.class);
+            asInterface.setAccessible(true);
+            Object api = asInterface.invoke(null, binder);
+            log("★ IStartup asInterface SUCCESS proxy="
+                    + (api == null ? "null" : api.getClass().getName()));
+            if (api != null) {
+                dumpClass(api.getClass(), "IStartup proxy", true);
+                Class<?>[] interfaces = api.getClass().getInterfaces();
+                for (Class<?> c : interfaces) {
+                    log("proxy interface=" + c.getName());
+                    dumpClass(c, "proxy interface " + c.getName(), true);
+                }
+            }
+        } catch (Throwable t) {
+            log("IStartup asInterface ERROR=" + err(t));
+        }
+    }
+
+    private Class<?> loadAny(String name) {
+        ClassLoader[] loaders = {carLoader, gearheadLoader, gmsLoader};
+        Set<ClassLoader> seen = new LinkedHashSet<>();
+        for (ClassLoader loader : loaders) {
+            if (loader == null || !seen.add(loader)) continue;
+            try {
+                return Class.forName(name, false, loader);
+            } catch (Throwable ignored) {}
+        }
+        return null;
+    }
+
+    private Method findMethod(Class<?> c, String name, Class<?>... params) {
+        if (c == null) return null;
+        try {
+            return c.getDeclaredMethod(name, params);
+        } catch (Throwable ignored) {
+            try {
+                return c.getMethod(name, params);
+            } catch (Throwable ignored2) {
+                return null;
+            }
+        }
+    }
+
+    private void dumpClass(Class<?> c, String label, boolean dumpFields) {
+        if (c == null) return;
+        log("--- " + label + " ---");
+        try {
+            Class<?> parent = c.getSuperclass();
+            if (parent != null) log(" superclass=" + parent.getName());
+        } catch (Throwable ignored) {}
+        try {
+            for (Class<?> i : c.getInterfaces()) log(" interface=" + i.getName());
+        } catch (Throwable ignored) {}
+        try {
+            for (Class<?> n : c.getDeclaredClasses()) log(" nested=" + n.getName());
+        } catch (Throwable ignored) {}
+        try {
+            Constructor<?>[] cs = c.getDeclaredConstructors();
+            for (int i = 0; i < Math.min(cs.length, 30); i++) {
+                log(" C " + cs[i].toGenericString());
+            }
+        } catch (Throwable t) {
+            log(" constructors ERROR=" + err(t));
+        }
+        try {
+            Method[] ms = c.getDeclaredMethods();
+            for (int i = 0; i < Math.min(ms.length, 160); i++) {
+                log(" M " + methodSig(ms[i]));
+            }
+            if (ms.length > 160) log(" ... methods=" + ms.length);
+        } catch (Throwable t) {
+            log(" methods ERROR=" + err(t));
+        }
+        if (!dumpFields) return;
+        try {
+            Field[] fs = c.getDeclaredFields();
+            int printed = 0;
+            for (Field f : fs) {
+                if (printed >= 100) break;
+                String name = f.getName();
+                boolean interesting = name.startsWith("TRANSACTION_")
+                        || name.toLowerCase().contains("navigation")
+                        || name.toLowerCase().contains("service")
+                        || name.toLowerCase().contains("startup")
+                        || name.toLowerCase().contains("status")
+                        || name.toLowerCase().contains("turn")
+                        || f.getType().isPrimitive()
+                        || f.getType() == String.class;
+                if (!interesting) continue;
+                String value = "(instance)";
+                if (Modifier.isStatic(f.getModifiers())) {
+                    try {
+                        f.setAccessible(true);
+                        value = String.valueOf(f.get(null));
+                    } catch (Throwable t) {
+                        value = "(unreadable)";
+                    }
+                }
+                log(" F " + f.getType().getSimpleName() + " " + name + "=" + value);
+                printed++;
+            }
+        } catch (Throwable t) {
+            log(" fields ERROR=" + err(t));
+        }
+    }
+
+    private String methodSig(Method m) {
+        try {
+            return m.toGenericString();
+        } catch (Throwable ignored) {
+            return m.toString();
+        }
+    }
+
+    private String describeContext(Context c) {
+        if (c == null) return "null";
+        try {
+            return c.getPackageName() + "/" + c.getClass().getName();
+        } catch (Throwable t) {
+            return c.getClass().getName();
+        }
+    }
+
+    private String err(Throwable t) {
+        if (t == null) return "null";
+        Throwable x = t;
+        int guard = 0;
+        while (x.getCause() != null && x.getCause() != x && guard++ < 12) {
+            x = x.getCause();
+        }
+        String msg = x.getMessage();
+        return x.getClass().getName() + (msg == null ? "" : ": " + msg);
+    }
+
+    private void copyLog() {
+        try {
+            ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            cm.setPrimaryClip(ClipData.newPlainText(
+                    "AI3 HUD Probe " + VERSION, logView.getText()));
+            Toast.makeText(this, "로그 복사 완료", Toast.LENGTH_SHORT).show();
+        } catch (Throwable t) {
+            log("로그 복사 ERROR=" + err(t));
+        }
     }
 
     private int dp(int n) {
         return Math.round(n * getResources().getDisplayMetrics().density);
     }
 
+    private void section(String title) {
+        log("\n=== " + title + " ===");
+    }
+
     private void log(String s) {
+        Log.d(TAG, s);
+        if (logView == null) return;
         runOnUiThread(() -> {
-            if (status != null) status.append(s + "\n");
+            logView.append(s + "\n");
+            if (logScroll != null) {
+                logScroll.post(() -> logScroll.fullScroll(View.FOCUS_DOWN));
+            }
         });
-    }
-
-    private static String err(Throwable t) {
-        Throwable x = t;
-        while (x.getCause() != null && x.getCause() != x) x = x.getCause();
-        return x.getClass().getSimpleName() + ": " + String.valueOf(x.getMessage());
-    }
-
-    private static String fullErr(Throwable t) {
-        StringBuilder sb = new StringBuilder();
-        Throwable x = t;
-        int depth = 0;
-        while (x != null && depth < 8) {
-            if (depth > 0) sb.append(" <- ");
-            sb.append(x.getClass().getSimpleName()).append(":").append(String.valueOf(x.getMessage()));
-            x = x.getCause();
-            depth++;
-        }
-        return sb.toString();
     }
 }
