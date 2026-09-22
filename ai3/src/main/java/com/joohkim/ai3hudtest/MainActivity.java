@@ -37,8 +37,8 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 public class MainActivity extends Activity {
-    private static final String TAG="AI3HUD100";
-    private static final String VERSION="1.00";
+    private static final String TAG="AI3HUD101";
+    private static final String VERSION="1.01";
     private static final String GEARHEAD="com.google.android.projection.gearhead";
 
     private TextView logView;
