@@ -1,0 +1,35 @@
+name: Bundle verified scrcpy Windows for LocalDex PC
+
+on:
+  push:
+    branches:
+      - localdex-widget
+    paths:
+      - '.github/workflows/bundle-scrcpy-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Download and verify official scrcpy Windows ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          url="https://github.com/Genymobile/scrcpy/releases/download/v5.0.1/scrcpy-win64-v5.0.1.zip"
+          curl -fL --retry 5 --retry-all-errors --retry-delay 3 \
+            --connect-timeout 30 --max-time 240 "$url" \
+            -o dist/scrcpy-win64-v5.0.1.zip
+          echo 'b12a2c4ee8be317422451fc7dcf8ee20a71b5ea7ef9ad73ddd825a25316227a5  dist/scrcpy-win64-v5.0.1.zip' | sha256sum -c -
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scrcpy-win64-offline-verified
+          path: dist/scrcpy-win64-v5.0.1.zip
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
