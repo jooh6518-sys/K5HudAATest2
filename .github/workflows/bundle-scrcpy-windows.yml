@@ -16,16 +16,28 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
-      - name: Download and verify official scrcpy Windows ZIP
+      - name: Download verified scrcpy Windows ZIP from mirror
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
-          url="https://github.com/Genymobile/scrcpy/releases/download/v5.0.1/scrcpy-win64-v5.0.1.zip"
-          curl -fL --retry 5 --retry-all-errors --retry-delay 3 \
-            --connect-timeout 30 --max-time 240 "$url" \
-            -o dist/scrcpy-win64-v5.0.1.zip
-          echo 'b12a2c4ee8be317422451fc7dcf8ee20a71b5ea7ef9ad73ddd825a25316227a5  dist/scrcpy-win64-v5.0.1.zip' | sha256sum -c -
+          urls=(
+            "https://downloads.sourceforge.net/project/scrcpy.mirror/v5.0.1/scrcpy-win64-v5.0.1.zip"
+            "https://sourceforge.net/projects/scrcpy.mirror/files/v5.0.1/scrcpy-win64-v5.0.1.zip/download"
+          )
+          success=0
+          for url in "${urls[@]}"; do
+            echo "Trying $url"
+            rm -f dist/scrcpy-win64-v5.0.1.zip
+            if curl -fL --retry 3 --retry-all-errors --retry-delay 2 --connect-timeout 25 --max-time 140 \
+                -A 'Mozilla/5.0' "$url" -o dist/scrcpy-win64-v5.0.1.zip; then
+              if echo 'b12a2c4ee8be317422451fc7dcf8ee20a71b5ea7ef9ad73ddd825a25316227a5  dist/scrcpy-win64-v5.0.1.zip' | sha256sum -c -; then
+                success=1
+                break
+              fi
+            fi
+          done
+          if [ "$success" -ne 1 ]; then echo "No verified package downloaded" >&2; exit 1; fi
       - uses: actions/upload-artifact@v4
         with:
           name: scrcpy-win64-offline-verified
