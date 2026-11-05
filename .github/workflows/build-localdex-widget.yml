@@ -1,0 +1,48 @@
+name: Build LocalDex widget APK
+
+on:
+  push:
+    branches:
+      - localdex-widget
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout upstream LocalDex source
+        run: |
+          git clone --depth 1 --branch main https://github.com/sam1am/localdex.git "$RUNNER_TEMP/localdex"
+      - name: Apply LocalDex widget enhancements
+        run: |
+          base64 -d localdex-overlay.tar.xz.b64 > "$RUNNER_TEMP/localdex-overlay.tar.xz"
+          tar -xJf "$RUNNER_TEMP/localdex-overlay.tar.xz" -C "$RUNNER_TEMP"
+          cp -a "$RUNNER_TEMP/overlay/app/." "$RUNNER_TEMP/localdex/app/"
+          cd "$RUNNER_TEMP/localdex"
+          sed -i 's/versionName = "0.1.0"/versionName = "0.1.0-widget.1"/' app/build.gradle.kts
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build debug APK
+        run: |
+          cd "$RUNNER_TEMP/localdex"
+          chmod +x ./gradlew
+          ./gradlew --no-daemon assembleDebug
+      - name: Copy result
+        run: |
+          mkdir -p dist
+          cp "$RUNNER_TEMP/localdex/app/build/outputs/apk/debug/app-debug.apk" dist/LocalDex-Widget-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LocalDex-Widget-APK
+          path: dist/LocalDex-Widget-debug.apk
+          if-no-files-found: error
+          retention-days: 30
