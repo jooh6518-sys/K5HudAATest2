@@ -41,3 +41,12 @@ jobs:
           name: Android-APK-Signer-Tool
           path: artifacts/apksigner.jar
           if-no-files-found: error
+
+      - name: Upload complete build source project (no private signing keys)
+        uses: actions/upload-artifact@v4
+        with:
+          name: NaverMap-HUD-Probe-v1.3.1-Source-Build
+          path: |
+            naver-probe/**
+            .github/workflows/build-naver-hud-unsigned.yml
+          if-no-files-found: error
