@@ -12,11 +12,24 @@ import java.lang.reflect.*;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.io.*;
+import java.util.ArrayDeque;
 
 public final class MainActivity extends Activity {
   private static final int TURN_RIGHT = 0x43;
   private final Handler ui = new Handler(Looper.getMainLooper());
   private TextView output;
+  private TextView aaState;
+  private CheckBox aaPark;
+  private boolean resumed=false;
+  private final Runnable aaStatusLoop = new Runnable() {
+    @Override public void run() {
+      if (!resumed) return;
+      String value=readSmall(new File(getFilesDir(), "aa.status"), 260);
+      if (aaState!=null) aaState.setText("AA 수집기 상태: " + (value.isEmpty()?"서비스 대기/미설치":value));
+      ui.postDelayed(this, 1500);
+    }
+  };
   private CheckBox confirm;
   private boolean active = false;
   private boolean busy = false;
@@ -34,9 +47,40 @@ public final class MainActivity extends Activity {
     body.setBackgroundColor(Color.rgb(246,247,249));
     sc.addView(body);
     setContentView(sc);
-    body.addView(text("K5 HUD 직접 출력 시험 v1.0",22));
+    body.addView(text("K5 HUD / Android Auto 데이터 시험 v1.1",22));
     body.addView(text("DL3HEV.KOR.0000.V039.001.260902 전용\nNEMESIS · Android 4.4.2",14));
     body.addView(text("반드시 정차(P) + 주차브레이크. 순정 길안내 종료. Android Auto 연결 해제. 주행 중 사용 금지.",16));
+    body.addView(text("Android Auto 네이버지도 수신 분석",19));
+    body.addView(text("NEMESIS root 서비스가 Android Auto 수신 프로그램(HKMC_GPM)의 로그를 90초간 읽습니다. 실행 중 화면을 전환해도 기록은 계속됩니다. 로그 기록만 하며 HUD로 보내지 않습니다.",14));
+    aaState=text("AA 수집기 연결 상태 확인 중",14);
+    body.addView(aaState);
+    aaPark=new CheckBox(this);
+    aaPark.setText("차량을 P 기어 + 주차브레이크로 안전하게 정차했습니다.");
+    aaPark.setTextSize(15);
+    body.addView(aaPark);
+    Button aaStart=button("AA 로그 90초 수집 시작");
+    aaStart.setOnClickListener(new View.OnClickListener(){
+      @Override public void onClick(View v){requestAaCapture();}
+    });
+    body.addView(aaStart);
+    Button aaStop=button("AA 로그 수집 중지");
+    aaStop.setOnClickListener(new View.OnClickListener(){
+      @Override public void onClick(View v){writeRequest("aa-request.stop");add("AA 수집 중지 요청");}
+    });
+    body.addView(aaStop);
+    Button aaCopy=button("AA 관련 로그 복사");
+    aaCopy.setOnClickListener(new View.OnClickListener(){
+      @Override public void onClick(View v){
+        String logs=aaSummary();
+        android.content.ClipboardManager cm=(android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+        if(cm!=null) {
+          cm.setPrimaryClip(ClipData.newPlainText("K5 Android Auto navigation probe",logs));
+          add("AA 관련 로그를 클립보드에 복사했습니다. 개인적인 도로명 등이 있는지 확인하고 보내주세요.");
+        }
+      }
+    });
+    body.addView(aaCopy);
+    body.addView(text("HUD 수동 출력 기능 (v1.0과 동일)",18));
     Button check=button("① HUD API 검사 (읽기 전용)");
     body.addView(check);
     check.setOnClickListener(new View.OnClickListener() {
@@ -60,7 +104,88 @@ public final class MainActivity extends Activity {
     output.setTextIsSelectable(true);
     output.setBackgroundColor(Color.WHITE);
     body.addView(output);
-    add("실행 완료. 버튼을 누르기 전에는 아무 HUD 정보도 출력하지 않습니다.");
+    add("AA 수신 로그 분석 준비 완료. HUD 직접 출력은 누르지 않으면 수행하지 않습니다.");
+  }
+
+  @Override protected void onResume(){
+    super.onResume();
+    resumed=true;
+    ui.removeCallbacks(aaStatusLoop);
+    ui.post(aaStatusLoop);
+  }
+  @Override protected void onPause(){
+    resumed=false;
+    ui.removeCallbacks(aaStatusLoop);
+    super.onPause();
+  }
+  private void writeRequest(String name) {
+    try {
+      File f=new File(getFilesDir(),name);
+      FileOutputStream os=new FileOutputStream(f);
+      os.write((String.valueOf(System.currentTimeMillis())+"\n").getBytes("UTF-8"));
+      os.close();
+    } catch(Exception e){ add("파일 요청 실패: "+e.getClass().getSimpleName()); }
+  }
+  private void requestAaCapture() {
+    if(!aaPark.isChecked()){add("차단: P 기어·주차브레이크 확인 필요.");return;}
+    if(parkState()==0){add("차단: 기어가 P가 아닙니다.");return;}
+    String status=readSmall(new File(getFilesDir(),"aa.status"),180);
+    if(status.startsWith("CAPTURING")){add("이미 90초 수집 중입니다.");return;}
+    new File(getFilesDir(),"aa-request.stop").delete();
+    writeRequest("aa-request.start");
+    add("Android Auto 로그 수집 시작 요청. 차에서 네이버지도 안내를 시작하고 90초 뒤 앱으로 돌아와 복사하세요.");
+  }
+  private static String readSmall(File f,int max) {
+    if(!f.isFile())return "";
+    StringBuilder result=new StringBuilder();
+    try {
+      BufferedReader b=new BufferedReader(new InputStreamReader(new FileInputStream(f),"UTF-8"));
+      String line; while((line=b.readLine())!=null&&result.length()<max)
+        result.append(line).append(" ");
+      b.close();
+    }catch(Exception e) {return "읽기 실패:"+e.getClass().getSimpleName();}
+    return result.toString().trim();
+  }
+  private String aaSummary() {
+    StringBuilder out=new StringBuilder();
+    out.append("K5 AA NAV PROBE v1.1\n");
+    out.append("Firmware: DL3HEV.KOR.0000.V039.001.260902\n");
+    out.append("Capture: ").append(readSmall(new File(getFilesDir(),"aa.status"),360)).append("\n");
+    out.append("Head unit GPM process:\n");
+    File ps=new File(getFilesDir(),"aa.processes");
+    try{
+      BufferedReader br=new BufferedReader(new InputStreamReader(new FileInputStream(ps),"UTF-8"));
+      String line;int n=0;while((line=br.readLine())!=null&&n<12){
+        if(line.contains("com.google.android.projection.sink")||
+           line.contains("com.telechips.android.gpm")||line.contains("hmgapi")){
+          out.append(line).append("\n");n++;
+        }
+      }br.close();
+    }catch(Exception e){out.append("(process snapshot unavailable)\n");}
+    String[] signals={"gpm","navigationstatus","navinextturn","nextturn","tbt",
+      "galreceiver","galconnection","projection","autoreceiver","navigation status",
+      "routeguidance","instrument_cluster","turn distance","hkmc_gpm"};
+    ArrayDeque<String> matches=new ArrayDeque<String>();
+    for(String filename:new String[]{"aa-capture.log.1","aa-capture.log"}){
+      File f=new File(getFilesDir(),filename);
+      if(!f.isFile())continue;
+      try{
+        BufferedReader br=new BufferedReader(new InputStreamReader(new FileInputStream(f),"UTF-8"));
+        String line;
+        while((line=br.readLine())!=null){
+          String lower=line.toLowerCase(Locale.US);
+          boolean ok=false;
+          for(String p:signals)if(lower.contains(p)){ok=true;break;}
+          if(ok){matches.addLast(line.length()>500?line.substring(0,500):line);
+            if(matches.size()>160)matches.removeFirst();}
+        }
+        br.close();
+      }catch(Exception e){out.append("(log read failed:").append(e.getClass().getSimpleName()).append(")\n");}
+    }
+    out.append("Candidate log lines: ").append(matches.size()).append(" (last 160 only)\n");
+    for(String line:matches)out.append(line).append("\n");
+    if(matches.isEmpty())out.append("NO_MATCH: Android Auto events are not exposed in sampled logcat. Native GPM callback hook may be needed.\n");
+    return out.toString();
   }
 
   private TextView text(String label,int sp) {

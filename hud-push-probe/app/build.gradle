@@ -6,8 +6,8 @@ android {
     applicationId 'kr.k5.hudprobe'
     minSdk 19
     targetSdk 19
-    versionCode 1
-    versionName '1.0'
+    versionCode 2
+    versionName '1.1'
   }
   // Head unit runs Android 4.4.2; this private APK is not distributed on Google Play.
   lint { disable 'ExpiredTargetSdkVersion' }

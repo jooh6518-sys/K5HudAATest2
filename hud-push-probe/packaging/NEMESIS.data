@@ -1,0 +1,24 @@
+[nemesis]
+version=1.1
+id=k5.hud.probe
+name=K5 HUD + AA Navigation Probe
+package-version=1.1
+short-desc=HUD test plus Android Auto navigation log recorder
+detailed-desc=Read-only 90-second GPM logcat test. No HKMC_GPM patch or system modifications.
+type=application,service
+os=*V039.001.260902
+models=DL3HEV*
+preinstall=scripts/check.sh
+
+[app.0]
+kind=apk
+path=app/K5HUDPushProbe.apk
+package=kr.k5.hudprobe
+component=kr.k5.hudprobe/.MainActivity
+
+[service.0]
+name=aa-log-recorder
+kind=sh
+path=svc/aa_capture.sh
+uid=root
+mode=restart

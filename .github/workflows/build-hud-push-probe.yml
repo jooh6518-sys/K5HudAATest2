@@ -2,7 +2,7 @@ name: Build K5 HUD Push Probe
 on:
   push:
     branches:
-      - k5-hud-push-probe-v10-20261108
+      - k5-aa-nav-log-probe-v11-20261108
   workflow_dispatch:
 jobs:
   build:
@@ -23,13 +23,13 @@ jobs:
       - name: Upload unsigned APK
         uses: actions/upload-artifact@v4
         with:
-          name: K5-HUD-Push-Probe-v1.0-unsigned
+          name: K5-AA-Navigation-Log-Probe-v1.1-unsigned
           path: hud-push-probe/app/build/outputs/apk/release/app-release-unsigned.apk
           if-no-files-found: error
       - name: Upload build source
         uses: actions/upload-artifact@v4
         with:
-          name: K5-HUD-Push-Probe-v1.0-source
+          name: K5-AA-Navigation-Log-Probe-v1.1-source
           path: |
             hud-push-probe/app/src/**
             hud-push-probe/app/build.gradle
@@ -37,5 +37,6 @@ jobs:
             hud-push-probe/settings.gradle
             hud-push-probe/gradle.properties
             hud-push-probe/README.md
+            hud-push-probe/packaging/**
             .github/workflows/build-hud-push-probe.yml
           if-no-files-found: error
