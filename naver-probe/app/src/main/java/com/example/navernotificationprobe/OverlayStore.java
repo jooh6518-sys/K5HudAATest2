@@ -68,7 +68,9 @@ final class OverlayStore {
     }
     static void clear(Context c) {
         synchronized (LOCK) {
-            c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().clear().commit();
+            c.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+                .remove("log").remove("fingerprint").remove("last").remove("info")
+                .remove("events").remove("changes").commit();
         }
     }
 }

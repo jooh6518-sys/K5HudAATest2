@@ -41,7 +41,7 @@ public final class MainActivity extends Activity {
         page.setBackgroundColor(Color.rgb(247, 248, 250));
         setContentView(page);
 
-        TextView title = text("네이버지도 HUD 데이터 테스트 v1.2", 20, true);
+        TextView title = text("네이버지도 HUD 데이터 테스트 v1.2.1", 20, true);
         page.addView(title);
         TextView help = text("회전 방향·거리 변경 시에만 기록합니다.\n수신은 계속 집계하며 인터넷 전송은 하지 않습니다.", 12, false);
         help.setPadding(0, dp(5), 0, dp(10));
@@ -121,13 +121,6 @@ public final class MainActivity extends Activity {
         actions.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         actions.addView(clear, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         copy.setOnClickListener(v -> {
-            String[] overlay = OverlayStore.snapshot(this);
-        overlayState.setText(overlay[0] + " · 이벤트 " + overlay[3] + "회 · 변경 " + overlay[4] + "회");
-        overlayInfo.setText("마지막: " + overlay[1] + "\n" + overlay[2]);
-        String accessLog = OverlayStore.log(this);
-        String lastRecord = accessLog.length() > 300 ? accessLog.substring(accessLog.length() - 300) : accessLog;
-        overlayEvents.setText(accessLog.isEmpty() ? "아직 접근성 텍스트 기록 없음" : lastRecord);
-
         String log = ProbeStore.readLog(this);
             if (log.isEmpty()) {
                 Toast.makeText(this, "기록이 없습니다", Toast.LENGTH_SHORT).show();
@@ -193,6 +186,16 @@ public final class MainActivity extends Activity {
         state.setText(enabled ? "● 알림 접근 허용됨" : "○ 알림 접근 권한 필요");
         state.setTextColor(enabled ? Color.rgb(23, 115, 70) : Color.rgb(167, 64, 38));
 
+        String[] overlay = OverlayStore.snapshot(this);
+                boolean accessibilityEnabled = isAccessibilityEnabled();
+                overlayState.setText((accessibilityEnabled ? "● 접근성 사용 중" : "○ 접근성 꺼짐") +
+                    " · 이벤트 " + overlay[3] + "회 · 변경 " + overlay[4] + "회");
+                overlayInfo.setText("마지막: " + overlay[1] + "\n" + overlay[2]);
+                String accessLog = OverlayStore.log(this);
+                String lastRecord = accessLog.length() > 300 ? accessLog.substring(accessLog.length() - 300) : accessLog;
+                overlayEvents.setText(accessLog.isEmpty() ? "아직 접근성 텍스트 기록 없음" : lastRecord);
+
+
         String[] s = ProbeStore.snapshot(this);
         String key = String.join("\t", s);
         if (!key.equals(oldSnapshot)) {
@@ -209,6 +212,19 @@ public final class MainActivity extends Activity {
             events.setText(log.isEmpty() ? "기록 대기 중" : log);
         }
     }
+
+    private boolean isAccessibilityEnabled() {
+        String raw = Settings.Secure.getString(getContentResolver(),
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        if (raw == null || raw.isEmpty()) return false;
+        ComponentName expected = new ComponentName(this, OverlayAccessibilityService.class);
+        for (String value : raw.split(":")) {
+            ComponentName current = ComponentName.unflattenFromString(value);
+            if (expected.equals(current)) return true;
+        }
+        return false;
+    }
+
     private int dp(int n) {
         return Math.round(n * getResources().getDisplayMetrics().density);
     }
