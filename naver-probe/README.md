@@ -1,10 +1,13 @@
-# Naver Notification Probe (debug test APK)
+# Naver Notification Probe v1.1
 
-Standalone Android application reading ONLY `com.nhn.android.nmap` notifications after the user grants Notification Access. Does not modify vehicle firmware, NEMESIS, Leafia Plus, or Android Auto.
+Small standalone Android test APK for the Naver Map (`com.nhn.android.nmap`) Samsung One UI ongoing-activity notification.
 
-- No INTERNET, location, overlay, or accessibility permissions.
-- Keeps logs in app-private storage; use Copy button to inspect/share after removing location information.
-- Build: from the `naver-probe` directory run `gradle :app:assembleDebug`.
-- Install: enable notification access for **네이버지도 알림 분석**, start Naver Map navigation, return to this app.
-- Expected fields: `android.title`, `android.text`, `android.bigText`, any text extras and `since_previous_posted`.
-- Android Auto connection and actual device behavior must still be validated.
+- Uses only Notification Listener permission. No network, location, overlay, accessibility, or vehicle privileges.
+- Reads `android.ongoingActivityNoti.primaryInfo` and `android.ongoingActivityNoti.secondaryInfo`.
+- Displays current instruction + normalized remaining distance (m), last notification time, notification count, and count of changes.
+- Stores only value changes (direction or distance) in internal app-private log.
+- Test first with Naver Map navigation on phone; then connect Android Auto and repeat. **Do not use the phone while driving.**
+- For sharing, review the log for sensitive place names.
+- Building: `gradle -p naver-probe :app:assembleDebug`.
+- This is a distinct debug-signing run from v1.0: uninstall v1.0 before installing v1.1 if package signature conflicts occur.
+- No HUD integration yet; this version verifies the data source.
