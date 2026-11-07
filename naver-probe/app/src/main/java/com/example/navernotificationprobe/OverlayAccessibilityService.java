@@ -12,10 +12,22 @@ import java.util.List;
 public final class OverlayAccessibilityService extends AccessibilityService {
     private static final String NAVER = "com.nhn.android.nmap";
     private long lastCapture = 0L;
+    private final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private boolean listening = false;
+    private final Runnable poll = new Runnable() {
+        @Override public void run() {
+            if (!listening) return;
+            scan("POLL", null);
+            handler.postDelayed(this, 1000L);
+        }
+    };
 
     @Override protected void onServiceConnected() {
         super.onServiceConnected();
+        listening = true;
         OverlayStore.connection(this, true);
+        handler.removeCallbacks(poll);
+        handler.post(poll);
     }
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -24,15 +36,15 @@ public final class OverlayAccessibilityService extends AccessibilityService {
         long time = SystemClock.elapsedRealtime();
         if (time - lastCapture < 700L) return;
         lastCapture = time;
+        scan("EVENT " + event.getEventType(), event.getSource());
+    }
 
+    private void scan(String kind, AccessibilityNodeInfo eventRoot) {
         LinkedHashSet<String> found = new LinkedHashSet<>();
-        int matchingWindows = 0;
+        int matched = 0;
         try {
-            // Accessibility events are restricted to the NAVER MAP package in the XML.
-            // Even when retrieving all interactive windows, ignore other packages.
-            AccessibilityNodeInfo source = event.getSource();
-            if (source != null) {
-                collect(source, found);
+            if (eventRoot != null && NAVER.contentEquals(eventRoot.getPackageName())) {
+                collect(eventRoot, found);
             }
             List<AccessibilityWindowInfo> windows = getWindows();
             if (windows != null) {
@@ -42,22 +54,26 @@ public final class OverlayAccessibilityService extends AccessibilityService {
                     if (root == null) continue;
                     CharSequence pkg = root.getPackageName();
                     if (pkg != null && NAVER.contentEquals(pkg)) {
-                        matchingWindows++;
+                        matched++;
+                        android.graphics.Rect bounds = new android.graphics.Rect();
+                        window.getBoundsInScreen(bounds);
+                        found.add("WINDOW: type=" + window.getType() + " bounds=" + bounds.toShortString());
                         collect(root, found);
                     }
                 }
             }
-        } catch (Exception ignored) {
-            found.add("(접근성 창 검사 실패)");
+        } catch (Exception e) {
+            found.add("SCAN_ERROR: " + e.getClass().getSimpleName());
         }
 
         StringBuilder text = new StringBuilder();
-        for (String line : found) {
-            if (text.length() + line.length() > 4500) break;
-            text.append(line).append('\n');
+        for (String item : found) {
+            if (text.length() + item.length() > 4500) break;
+            text.append(item).append('\n');
         }
         if (text.length() > 0) text.setLength(text.length() - 1);
-        OverlayStore.record(this, Integer.toString(event.getEventType()), matchingWindows, text.toString());
+        // Save only changed text snapshots, while still counting every accessibility poll.
+        OverlayStore.record(this, kind, matched, text.toString());
     }
 
     private void collect(AccessibilityNodeInfo root, LinkedHashSet<String> output) {
@@ -90,7 +106,15 @@ public final class OverlayAccessibilityService extends AccessibilityService {
     }
 
     @Override public void onInterrupt() {}
+    @Override public void onDestroy() {
+        listening = false;
+        handler.removeCallbacks(poll);
+        OverlayStore.connection(this, false);
+        super.onDestroy();
+    }
     @Override public boolean onUnbind(android.content.Intent intent) {
+        listening = false;
+        handler.removeCallbacks(poll);
         OverlayStore.connection(this, false);
         return super.onUnbind(intent);
     }

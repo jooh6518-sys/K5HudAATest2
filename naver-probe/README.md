@@ -1,9 +1,10 @@
-# Naver Map overlay + notification probe v1.2
-The notification listener still reads Naver Map turn/distance as before.
-A separate **optional** AccessibilityService listens only to Naver Map events and saves visible text or contentDescription of Naver Map nodes, deduplicated and limited to the app's private storage. It never requests INTERNET permission.
-Install via adb if trusted; debug signing may differ so uninstall old package first.
-Enable Settings > Accessibility > Installed apps > "네이버지도 안내창 분석".
-Start Naver Map navigation, press Home to show the floating small guidance window, then come back to this app and copy "안내창 기록".
-If the overlay is a custom-drawn Surface rather than accessible text nodes, output will say "텍스트 노드 없음".
-**Accessibility permissions are powerful**. Disable the service after the test.
-Do not interact with the phone while driving.
+# Naver Map notification and overlay probe v1.3
+- NotificationListener: turn and distance updates from Naver One UI notification.
+- AccessibilityService: reacts to Naver Map events and scans the Naver Map windows every 1 second. No OCR.
+- Includes each matching window's accessibility type and screen bounds so a small floating window can be distinguished from the full navigation screen.
+- Only Naver Map package nodes are recorded. Internet and external data transmissions are not present.
+- The "accessibility enabled" label is derived from Android settings every 500ms, independently of log copy actions.
+- Does not capture on other apps without Naver accessibility windows, cannot guarantee ability to read second turn.
+- Uninstall previous debug versions if signatures differ, then install, re-enable Notification Access and Accessibility.
+- Stop accessibility service after testing to avoid battery overhead and sensitive permission usage.
+- No modifications to NEMESIS / HUD / Android Auto.
