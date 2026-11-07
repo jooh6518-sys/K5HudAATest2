@@ -41,7 +41,7 @@ public final class MainActivity extends Activity {
         page.setBackgroundColor(Color.rgb(247, 248, 250));
         setContentView(page);
 
-        TextView title = text("네이버지도 HUD 데이터 테스트 v1.3", 20, true);
+        TextView title = text("네이버지도 HUD 테스트 v1.3.1", 20, true);
         page.addView(title);
         TextView help = text("회전 방향·거리 변경 시에만 기록합니다.\n수신은 계속 집계하며 인터넷 전송은 하지 않습니다.", 12, false);
         help.setPadding(0, dp(5), 0, dp(10));
