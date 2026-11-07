@@ -4,6 +4,7 @@ on:
     branches:
       - naver-notification-probe-20261108
       - naver-notification-probe-v11-20261108
+      - naver-overlay-accessibility-v12-20261108
   workflow_dispatch:
 jobs:
   build-apk:
@@ -24,6 +25,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: NaverNotificationProbe-v1.1-debug-apk
+          name: NaverNotificationProbe-v1.2-overlay-debug-apk
           path: naver-probe/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
