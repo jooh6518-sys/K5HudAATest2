@@ -1,56 +1,81 @@
 #!/system/bin/sh
-# K5 AA navigation-status log collector.
-# Root service: reads only Android logcat and package process list when the user
-# presses the capture button. Nothing is transmitted or changed in /system.
+# Android Auto Dalvik method sampling, parked-car manual trigger only.
+# Unmodified OEM GPM/APK/ODEX/SO. No hook map or binary writes.
 BASE=/data/data/kr.k5.hudprobe/files
+TARGET=com.google.android.projection.sink
+TRACE=/data/local/tmp/k5-aa-method.trace
 
-write_state() {
+state() {
   echo "$1" > "$BASE/aa.status"
   chmod 644 "$BASE/aa.status" 2>/dev/null
 }
+stop_profile() {
+  am profile stop "$TARGET" > "$BASE/aa-profile-stop.txt" 2>&1
+  return $?
+}
+trap 'stop_profile >/dev/null 2>&1; exit 0' 15 2 1
+
 while [ ! -d "$BASE" ]; do sleep 2; done
-write_state "IDLE - ready for 90s manual AA capture"
+state "IDLE - press AA method trace button for 90 seconds"
 
 while true; do
   if [ -f "$BASE/aa-request.start" ]; then
     rm -f "$BASE/aa-request.start" "$BASE/aa-request.stop"
-    rm -f "$BASE/aa-capture.log" "$BASE/aa-capture.log.1" "$BASE/aa-capture.log.2"
+    rm -f "$BASE/aa-method.trace" "$TRACE"
     ps > "$BASE/aa.processes" 2>/dev/null
     chmod 644 "$BASE/aa.processes" 2>/dev/null
-    write_state "CAPTURING - started $(date '+%m-%d %H:%M:%S') (90s max)"
+    state "STARTING - method trace requested"
 
-    # -f/-r/-n are supported by legacy Android logcat. Rotate raw data at
-    # 256 KiB per file so the recorder cannot fill the head unit.
-    logcat -v threadtime -b main -b system -f "$BASE/aa-capture.log" -r 256 -n 2 &
-    CAP_PID=$!
-    sleep 2
-    if ! kill -0 "$CAP_PID" 2>/dev/null; then
-      # Some vendor builds disallow combined buffers; main buffer fallback.
-      logcat -v time -b main -f "$BASE/aa-capture.log" -r 256 -n 2 &
-      CAP_PID=$!
-      sleep 2
-      if ! kill -0 "$CAP_PID" 2>/dev/null; then
-        write_state "ERROR - logcat capture not supported; check NEMESIS service log"
-        sleep 1
-        continue
-      fi
+    # On KitKat: am profile start --sampling INTERVAL(us) PROCESS FILE
+    # Sampling instead of instrument-every-method reduces load on old hardware.
+    am profile start --sampling 1000 "$TARGET" "$TRACE" > "$BASE/aa-profile-start.txt" 2>&1
+    CODE=$?
+    chmod 644 "$BASE/aa-profile-start.txt" 2>/dev/null
+
+    if [ "$CODE" -ne 0 ]; then
+      state "ERROR - am profile start failed (see aa-profile-start.txt, code $CODE)"
+      continue
+    fi
+    if grep -i 'PROFILE FAILED' "$BASE/aa-profile-start.txt" >/dev/null 2>&1; then
+      state "ERROR - profile refused by Android (see aa-profile-start.txt)"
+      continue
+    fi
+    if grep -i 'Error:' "$BASE/aa-profile-start.txt" >/dev/null 2>&1; then
+      state "ERROR - profile rejected (see aa-profile-start.txt)"
+      continue
     fi
 
-    SECONDS_LEFT=90
-    REASON="90 seconds reached"
-    while [ "$SECONDS_LEFT" -gt 0 ]; do
+    state "CAPTURING - 90s 1ms sampling; switch to Naver Map AA now"
+    LEFT=90
+    REASON="90-second timeout"
+    while [ "$LEFT" -gt 0 ]; do
       if [ -f "$BASE/aa-request.stop" ]; then
-        REASON="manually stopped"
+        REASON="manual stop"
         break
       fi
       sleep 1
-      SECONDS_LEFT=$((SECONDS_LEFT-1))
+      LEFT=$((LEFT - 1))
     done
-    kill "$CAP_PID" 2>/dev/null
-    wait "$CAP_PID" 2>/dev/null
-    chmod 644 "$BASE/aa-capture.log" "$BASE/aa-capture.log.1" "$BASE/aa-capture.log.2" 2>/dev/null
+
+    stop_profile
+    STOPCODE=$?
+    sleep 2
+    chmod 644 "$BASE/aa-profile-stop.txt" 2>/dev/null
     rm -f "$BASE/aa-request.stop"
-    write_state "FINISHED - $REASON at $(date '+%m-%d %H:%M:%S')"
+
+    if [ -s "$TRACE" ]; then
+      cp "$TRACE" "$BASE/aa-method.trace"
+      COPYCODE=$?
+      if [ "$COPYCODE" -eq 0 ]; then
+        chmod 644 "$BASE/aa-method.trace" 2>/dev/null
+        state "FINISHED - method trace saved ($REASON). Export to USB."
+      else
+        state "ERROR - trace generated but copy failed; see NEMESIS service log"
+      fi
+      rm -f "$TRACE"
+    else
+      state "ERROR - no trace file (stop code $STOPCODE); inspect am profile logs"
+    fi
   fi
   sleep 1
 done

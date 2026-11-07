@@ -1,29 +1,42 @@
-# K5 AA Nav Log Probe v1.1
-K5 DL3HEV V039.001.260902; Android 4.4.2; NEMESIS 1.16.7.
+# K5 Android Auto Method Trace v1.4
+## Scope
+2021 K5 DL3HEV, Android 4.4.2, V039.001.260902. APK is updated
+from v1.1 using the SAME package ID and original developer signature key.
+NEMESIS package ID k5.hud.probe, version 1.4.
 
-The verified v1.0 HUD test (manual right turn 300m, automatic clearing at 5s) remains unchanged.
-v1.1 adds an optional **90-second read-only Android Auto receiver log capture**.
-NEMESIS starts one idle root service. It does not record anything until the in-app
-"AA 로그 90초 수집 시작" button is clicked. The service stores capped rolling
-Android logcat files only inside the probe APK's private data folder; the app
-copies only matching GPM/NavigationStatus/projection lines to clipboard.
-No Internet permission, no binary patch, no maps and no GPM code injection.
+The user's uploaded factory GPM ODEX and native receiver library were reviewed
+locally and are NOT in this repository or distributable package.
+Verified factory GPM symbols:
+- com.google.android.projection.protocol.NavigationStatus.navigationNextTurnCallback(String,int,int,byte[],int,int)
+- com.google.android.projection.protocol.NavigationStatus.navigationNextTurnDistanceCallback(int,int,int,int)
+- com.google.android.projection.service.GalConnectionSession$4.onNextTurn(...)
+- com.google.android.projection.sink.navigation.GpmNaviTBTManager.onNextTurn(String,int,int,int,int)
+- com.google.android.projection.sink.navigation.GpmNaviTBTManager.onNextTurnDistance(int,int,int)
 
-## Test
-1. Park, parking brake, stock navigation guidance off. Connect Android Auto.
-2. Open NEMESIS Manager -> My Packages -> K5 HUD + AA Navigation Probe -> Launch.
-3. Tick P gear / parking brake. Tap "AA 로그 90초 수집 시작".
-4. Start Naver Map guidance inside Android Auto, ideally change route direction while
-   vehicle remains parked. (Do not interact with device while moving.)
-5. After 90 seconds or manual stop, open probe and tap "AA 관련 로그 복사".
-6. Inspect for personal road names and copy the curated log to the chat.
+## Function
+NEMESIS root service waits for the same manual AA-start request as the app.
+It calls Android 4.4's built-in 'am profile start --sampling 1000'
+on com.google.android.projection.sink for up to 90 seconds.
+The trace contains observed method names, not argument values.
+The service stops profiling, saves the binary trace in the app's
+private files and waits idle. It never changes /system, GPM ODEX/APK
+or the receiver .so. A separate read-only USB export retrieves the trace.
 
-## Interpreting results
-Presence of native GPM/navigation log lines proves only that logs exist, not that the
-user's Naver Map turn payload is available. NO_MATCH is NOT proof that Android Auto
-has no data: vendor release builds may omit all callback logs. A targeted,
-car-firmware-specific instrumentation/hook may then be necessary.
+## Parked vehicle usage
+1. Install the NEMESIS update without uninstalling the v1.1 app.
+2. Connect Android Auto and start Naver Map guidance while parked.
+3. Open updated app; check the parked-car checkbox and press
+   "AA 메서드 추적 90초 시작".
+4. Return to Naver Map; wait for 'FINISHED' or press stop.
+5. Disconnect AA, run K5-AA-METHOD-TRACE-EXPORT USB utility, attach
+   aa-method.trace + capture-status.txt to the chat.
 
-No other NEMESIS packages and no /system files are changed. The service monitors
-control files and logs only when requested; remove this test package via NEMESIS Manager
-when finished.
+## Interpretation / limits
+- This is *sampling*, not a guaranteed record of all method calls. A very brief
+  callback may not appear even when it executed.
+- The method trace proves observed Java callbacks but DOES NOT capture input
+  argument values or instrument native C++ callbacks.
+- A crash, UI performance degradation or Android command rejection is possible
+  on the aging head unit. Do not run while driving.
+- If profiling is refused, status and diagnostic output are exported.
+- The previous manual HUD test remains independent and unchanged.

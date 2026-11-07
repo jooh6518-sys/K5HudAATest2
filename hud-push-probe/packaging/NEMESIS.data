@@ -1,10 +1,10 @@
 [nemesis]
 version=1.1
 id=k5.hud.probe
-name=K5 HUD + AA Navigation Probe
-package-version=1.1
-short-desc=HUD test plus Android Auto navigation log recorder
-detailed-desc=Read-only 90-second GPM logcat test. No HKMC_GPM patch or system modifications.
+name=K5 HUD + AA Method Trace Probe
+package-version=1.4
+short-desc=Read-only Android Auto navigation callback method trace
+detailed-desc=90-second sample profiler for AA/GPM. No changes to OEM system or projection files.
 type=application,service
 os=*V039.001.260902
 models=DL3HEV*
