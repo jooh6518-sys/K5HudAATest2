@@ -25,10 +25,16 @@ html.mwv-layout-active.mwv-page-play .play-select {
 css_file.write_text(css, encoding="utf-8")
 js_file = root / "app/src/main/assets/site-layout.js"
 js = js_file.read_text(encoding="utf-8")
-start = js.index("    if (!isPlaying) return;")
-end = js.index("\n  }\n  rearrange();", start)
-js = js[:start] + """    /* Original DOM sequence: player / utility buttons / hidden banner / episode list.
-       Do not move original elements to preserve player event handlers. */""" + js[end:]
+if "    if (!isPlaying) return;" in js:
+    start = js.index("    if (!isPlaying) return;")
+    end = js.index("\n  }\n  rearrange();", start)
+    js = js[:start] + "    /* Original DOM order is correct. Keep buttons and playlist in place. */" + js[end:]
+elif "  if(!playing)return;" in js:
+    start = js.index("  if(!playing)return;")
+    end = js.index("\n }\n rearrange();", start)
+    js = js[:start] + "  /* Original DOM order is correct. Keep buttons and playlist in place. */" + js[end:]
+else:
+    raise RuntimeError("Unknown layout-js source format")
 js_file.write_text(js, encoding="utf-8")
 gradle_file = root / "app/build.gradle.kts"
 g = gradle_file.read_text(encoding="utf-8")
