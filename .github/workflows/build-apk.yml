@@ -1,7 +1,7 @@
-name: Build Joott 1.10 unsigned release
+name: Build Joott 1.11 unsigned APK
 on:
   push:
-    branches: [joott-v1-10-single-focus-player]
+    branches: [joott-v1-11-external-video]
   workflow_dispatch:
 jobs:
   build:
@@ -18,40 +18,41 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Restore latest Joott v1.9 source
+      - name: Restore exact Joott 1.10 source
         uses: actions/download-artifact@v4
         with:
-          name: Joott-v1-9-unsigned-and-source
-          run-id: 44741817814
+          name: Joott-v1-10-unsigned-and-source
+          run-id: 44745628727
           github-token: ${{ github.token }}
           path: previous
-      - name: Apply Joott 1.10 patch
+      - name: Apply and check v1.11 source patch
         run: |
-          tar -xzf previous/Joott_v1_9_source.tgz
-          base64 -d joott_v110.patch.xz.b64 | xz -d > joott_v110.patch
-          patch --batch --forward -p1 -d MyWebViewer_v1 < joott_v110.patch
-          grep -q 'versionCode = 11' MyWebViewer_v1/app/build.gradle.kts
-          grep -q 'versionName = "1.10"' MyWebViewer_v1/app/build.gradle.kts
-          grep -q 'createFullscreenControls' MyWebViewer_v1/app/src/main/java/com/jooh/mywebviewer/MainActivity.java
+          tar -xzf previous/Joott_v1_10_source.tgz
+          base64 -d ci_patch111.py.xz.b64 | xz -d > ci_patch111.py
+          python3 ci_patch111.py
+          test -s MyWebViewer_v1/app/src/main/assets/site-layout.css
+          grep -q 'versionCode = 12' MyWebViewer_v1/app/build.gradle.kts
+          grep -q 'versionName = "1.11"' MyWebViewer_v1/app/build.gradle.kts
+          grep -q 'openInExternalPlayer' MyWebViewer_v1/app/src/main/java/com/jooh/mywebviewer/MainActivity.java
           rm -rf MyWebViewer_v1/app/build MyWebViewer_v1/.gradle
-      - name: Install Android SDK
+      - name: Install Android SDK components
         run: |
           SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
           test -n "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
-      - name: Compile unsigned release
+      - name: Compile unsigned release APK
         working-directory: MyWebViewer_v1
         run: gradle --no-daemon --stacktrace :app:assembleRelease
-      - name: Package unsigned APK and exact source
+      - name: Export source and APK
         run: |
           test -s MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
-          tar -czf Joott_v1_10_source.tgz --exclude=build --exclude=.gradle MyWebViewer_v1
+          tar -czf Joott_v1_11_source.tgz --exclude=build --exclude=.gradle MyWebViewer_v1
           sha256sum MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: Joott-v1-10-unsigned-and-source
+          name: Joott-v1-11-unsigned-and-source
           if-no-files-found: error
           path: |
             MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
-            Joott_v1_10_source.tgz
+            Joott_v1_11_source.tgz
