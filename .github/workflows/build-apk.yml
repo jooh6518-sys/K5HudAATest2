@@ -20,12 +20,14 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Install Android 35 build packages
+      - name: Install Android SDK packages
         run: |
           echo "ANDROID_HOME=$ANDROID_HOME"
-          sdkmanager --version
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
+          test -n "$SDKMANAGER"
+          "$SDKMANAGER" --version
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
       - name: Unpack exact v1 source archive
         run: tar -xzf MyWebViewer_v1_source.tgz
       - name: Build APK
