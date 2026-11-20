@@ -16,14 +16,16 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
       - name: Setup Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
       - name: Install Android 35 build packages
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          sdkmanager --version
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
       - name: Unpack exact v1 source archive
         run: tar -xzf MyWebViewer_v1_source.tgz
       - name: Build APK
@@ -31,7 +33,7 @@ jobs:
         run: gradle --no-daemon --stacktrace :app:assembleDebug
       - name: Display APK SHA256
         run: sha256sum MyWebViewer_v1/app/build/outputs/apk/debug/app-debug.apk
-      - name: Upload APK and exact source archive
+      - name: Upload APK and source archive
         uses: actions/upload-artifact@v4
         with:
           name: MyWebViewer-v1-installable
