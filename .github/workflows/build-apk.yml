@@ -1,7 +1,7 @@
-name: Build MyWebViewer APK
+name: Build MyWebViewer 1.1 APK
 on:
   push:
-    branches: [mywebviewer-v1-build]
+    branches: [mywebviewer-v1-1-build]
   workflow_dispatch:
 jobs:
   build:
@@ -9,37 +9,37 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout isolated build branch
-        uses: actions/checkout@v4
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - name: Setup Gradle 8.9
-        uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
       - name: Install Android SDK packages
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
           SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
           test -n "$SDKMANAGER"
-          "$SDKMANAGER" --version
           yes | "$SDKMANAGER" --licenses > /dev/null || true
           "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
-      - name: Unpack exact v1 source archive
-        run: tar -xzf MyWebViewer_v1_source.tgz
+      - name: Unpack and patch v1 source into 1.1
+        run: |
+          tar -xzf MyWebViewer_v1_source.tgz
+          cp overlay-assets/* MyWebViewer_v1/app/src/main/assets/
+          python3 v1_1_patch.py
       - name: Build APK
         working-directory: MyWebViewer_v1
         run: gradle --no-daemon --stacktrace :app:assembleDebug
-      - name: Display APK SHA256
-        run: sha256sum MyWebViewer_v1/app/build/outputs/apk/debug/app-debug.apk
-      - name: Upload APK and source archive
-        uses: actions/upload-artifact@v4
+      - name: Package source and verify
+        run: |
+          tar -czf MyWebViewer_v1_1_source.tgz MyWebViewer_v1
+          test -s MyWebViewer_v1/app/build/outputs/apk/debug/app-debug.apk
+          sha256sum MyWebViewer_v1/app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@v4
         with:
-          name: MyWebViewer-v1-installable
+          name: MyWebViewer-v1-1-installable
           if-no-files-found: error
           path: |
             MyWebViewer_v1/app/build/outputs/apk/debug/app-debug.apk
-            MyWebViewer_v1_source.tgz
+            MyWebViewer_v1_1_source.tgz

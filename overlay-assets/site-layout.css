@@ -1,0 +1,21 @@
+/* MyWebViewer 1.1 — based on page HTML supplied by user */
+html.mwv-layout-active #advertiseMain,
+html.mwv-layout-active .hezuo_div1,
+html.mwv-layout-active .mwv-hide-ad-card,
+html.mwv-layout-active .banner-box,
+html.mwv-layout-active .sidebar.list-w-b,
+html.mwv-layout-active .ec-footer_scroll,
+html.mwv-layout-active footer,
+html.mwv-layout-active #footer,
+html.mwv-layout-active .site-footer {display:none !important}
+html.mwv-layout-active .container.flex > .mobile-main,
+html.mwv-layout-active .container.flex > .mobile-main-type {
+ width:100% !important;max-width:100% !important;min-width:0 !important;flex:1 1 100% !important
+}
+html.mwv-layout-active.mwv-page-play #MacPlayer,
+html.mwv-layout-active.mwv-page-play #player,
+html.mwv-layout-active.mwv-page-play #playbox,
+html.mwv-layout-active.mwv-page-play .player-box,
+html.mwv-layout-active.mwv-page-play .player-container,
+html.mwv-layout-active.mwv-page-play .play-player {width:100% !important;max-width:100% !important;min-width:0 !important}
+html.mwv-layout-active.mwv-page-play video,html.mwv-layout-active.mwv-page-play iframe {max-width:100%}

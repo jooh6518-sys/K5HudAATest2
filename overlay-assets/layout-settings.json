@@ -1,0 +1,28 @@
+{
+  "hideAds": true,
+  "hideRecommendations": true,
+  "hideFooter": true,
+  "keepTopMenu": true,
+  "keepBottomCategoryNavigation": true,
+  "moveEpisodesBelowPlayer": true,
+  "expandPlayer": true,
+  "verifiedSelectors": {
+    "ads": [
+      "#advertiseMain",
+      ".hezuo_div1",
+      ".banner-box"
+    ],
+    "recommendations": [
+      ".sidebar.list-w-b"
+    ],
+    "footer": [
+      ".ec-footer_scroll"
+    ],
+    "episodesOnDetails": [
+      ".play-select",
+      ".content_playlist"
+    ],
+    "playerOnPlaybackPage": []
+  },
+  "note": "Playback player not verified; conditional playlist relocation only."
+}
