@@ -31,6 +31,7 @@ jobs:
           cat joott_v114.part{0,1,2,3} | base64 -d | xz -d > joott_v114.patch
           echo '88c32a186cec27415148d95ac2e830c76ebae54aefc9976ae5427ec1961d8ad0  joott_v114.patch' | sha256sum -c -
           patch --batch --forward -d MyWebViewer_v1 -p1 < joott_v114.patch
+          cat joott_v114_touch_fix.css >> MyWebViewer_v1/app/src/main/assets/site-layout.css
           grep -q 'versionCode = 15' MyWebViewer_v1/app/build.gradle.kts
           grep -q 'versionName = "1.14"' MyWebViewer_v1/app/build.gradle.kts
           test -s MyWebViewer_v1/app/src/main/assets/tv-remote.js
