@@ -1,7 +1,7 @@
-name: Build Joott 1.4 APK
+name: Build Joott 1.5 unsigned APK
 on:
   push:
-    branches: [mywebviewer-v1-4-tablet-build]
+    branches: [joott-v1-5-improvements]
   workflow_dispatch:
 jobs:
   build:
@@ -18,39 +18,57 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Fetch v1.3 source
+      - name: Download v1.4 verified source
         uses: actions/download-artifact@v4
         with:
-          name: MyWebViewer-v1-3-TV-unsigned
-          run-id: 44688515618
+          name: Joott-v1-4-unsigned-and-source
+          run-id: 44692580624
           github-token: ${{ github.token }}
           path: previous
-      - name: Patch to Joott v1.4
+      - name: Restore source and patch assets
         run: |
-          tar -xzf previous/MyWebViewer_v1_3_TV_DeX_source.tgz
-          base64 -d joott_patch.py.gz.b64 | gzip -d > joott_patch.py
-          python3 joott_patch.py MyWebViewer_v1
-          grep -q 'android:label="Joott"' MyWebViewer_v1/app/src/main/AndroidManifest.xml
-          grep -q 'versionCode = 5' MyWebViewer_v1/app/build.gradle.kts
-          rm -rf MyWebViewer_v1/app/build MyWebViewer_v1/.gradle
-      - name: Install SDK
+          test -s previous/Joott_v1_4_source.tgz
+          tar -xzf previous/Joott_v1_4_source.tgz
+          base64 -d joott-v15-assets.patch.b64 | gzip -dc > assets.patch
+          patch -p1 -d MyWebViewer_v1 < assets.patch
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('MyWebViewer_v1')
+          p=root/'app/build.gradle.kts'
+          t=p.read_text()
+          assert 'versionCode = 5' in t and 'versionName = "1.4"' in t
+          p.write_text(t.replace('versionCode = 5','versionCode = 6').replace('versionName = "1.4"','versionName = "1.5"'))
+          p=root/'app/src/main/java/com/jooh/mywebviewer/MainActivity.java'
+          t=p.read_text()
+          assert '.setTitle("Joott 1.4")' in t
+          t=t.replace('.setTitle("Joott 1.4")','.setTitle("Joott 1.5")')
+          original='(function(){if(window.__joottClearMenus)window.__joottClearMenus();'
+          assert original in t
+          t=t.replace(original,'(function(){if(window.__joottClearExtras)window.__joottClearExtras();if(window.__joottClearMenus)window.__joottClearMenus();')
+          p.write_text(t)
+          readme=root/'README.md'
+          readme.write_text('# Joott v1.5\n\nLogo hidden site-wide, search icon expands on phones, long episode lists initially collapsed, automatic initial scroll to player. Android TV remote mode and original video playback remain unchanged. Upgrades v1.4 under same signing certificate; versionCode 6.\n\n'+readme.read_text())
+          PY
+          node --check MyWebViewer_v1/app/src/main/assets/site-layout.js
+          test "$(grep -c 'Joott 1.5' MyWebViewer_v1/app/src/main/java/com/jooh/mywebviewer/MainActivity.java)" -ge 1
+      - name: Install Android SDK
         run: |
           SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
           test -n "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses > /dev/null || true
           "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
-      - name: Compile unsigned release
+      - name: Compile release
         working-directory: MyWebViewer_v1
         run: gradle --no-daemon --stacktrace :app:assembleRelease
       - name: Package source
         run: |
           test -s MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
-          tar -czf Joott_v1_4_source.tgz --exclude=build --exclude=.gradle MyWebViewer_v1
+          tar -czf Joott_v1_5_source.tgz --exclude=build --exclude=.gradle MyWebViewer_v1
           sha256sum MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: Joott-v1-4-unsigned-and-source
+          name: Joott-v1-5-unsigned-and-source
           if-no-files-found: error
           path: |
             MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
-            Joott_v1_4_source.tgz
+            Joott_v1_5_source.tgz
