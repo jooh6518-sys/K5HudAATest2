@@ -1,7 +1,7 @@
-name: Build MyWebViewer 1.1 APK
+name: Build MyWebViewer 1.2 TV/DeX unsigned APK
 on:
   push:
-    branches: [mywebviewer-v1-1-build]
+    branches: [mywebviewer-v1-2-tv-build]
   workflow_dispatch:
 jobs:
   build:
@@ -21,25 +21,34 @@ jobs:
         run: |
           SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
           test -n "$SDKMANAGER"
-          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
-      - name: Unpack and patch v1 source into 1.1
+      - name: Assemble exact source from existing 1.1 + 1.2 overlay
         run: |
           tar -xzf MyWebViewer_v1_source.tgz
           cp overlay-assets/* MyWebViewer_v1/app/src/main/assets/
           python3 v1_1_patch.py
-      - name: Build APK
+          tar -xJf MyWebViewer_v1_2_tv_overlay.tar.xz -C MyWebViewer_v1
+          test -s MyWebViewer_v1/app/src/main/res/drawable/tv_banner.png
+      - name: Compile unsigned release APK
         working-directory: MyWebViewer_v1
-        run: gradle --no-daemon --stacktrace :app:assembleDebug
-      - name: Package source and verify
+        run: gradle --no-daemon --stacktrace :app:assembleRelease
+      - name: Export source and offline signing tools
         run: |
-          tar -czf MyWebViewer_v1_1_source.tgz MyWebViewer_v1
-          test -s MyWebViewer_v1/app/build/outputs/apk/debug/app-debug.apk
-          sha256sum MyWebViewer_v1/app/build/outputs/apk/debug/app-debug.apk
+          test -s MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          test -s "$BUILD_TOOLS/lib/apksigner.jar"
+          test -s "$BUILD_TOOLS/zipalign"
+          cp "$BUILD_TOOLS/lib/apksigner.jar" apksigner.jar
+          cp "$BUILD_TOOLS/zipalign" zipalign
+          tar -czf MyWebViewer_v1_2_tv_source.tgz MyWebViewer_v1
+          sha256sum MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: MyWebViewer-v1-1-installable
+          name: MyWebViewer-v1-2-TV-unsigned
           if-no-files-found: error
           path: |
-            MyWebViewer_v1/app/build/outputs/apk/debug/app-debug.apk
-            MyWebViewer_v1_1_source.tgz
+            MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
+            MyWebViewer_v1_2_tv_source.tgz
+            apksigner.jar
+            zipalign
