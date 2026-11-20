@@ -1,7 +1,7 @@
-name: Build MyWebViewer 1.2 TV/DeX unsigned APK
+name: Build MyWebViewer 1.3 TV DeX
 on:
   push:
-    branches: [mywebviewer-v1-2-tv-build]
+    branches: [mywebviewer-v1-3-tv-build]
   workflow_dispatch:
 jobs:
   build:
@@ -23,32 +23,31 @@ jobs:
           test -n "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
-      - name: Assemble exact source from existing 1.1 + 1.2 overlay
+      - name: Reconstruct 1.2 and apply the 1.3 patch
         run: |
           tar -xzf MyWebViewer_v1_source.tgz
           cp overlay-assets/* MyWebViewer_v1/app/src/main/assets/
           python3 v1_1_patch.py
           tar -xJf MyWebViewer_v1_2_tv_overlay.tar.xz -C MyWebViewer_v1
-          test -s MyWebViewer_v1/app/src/main/res/drawable/tv_banner.png
-      - name: Compile unsigned release APK
+          tar -xJf MyWebViewer_v1_3_overlay.tar.xz
+          patch -d MyWebViewer_v1 -p0 --batch < mwv13_MainActivity.patch
+          cat mwv13_css_append.txt >> MyWebViewer_v1/app/src/main/assets/site-layout.css
+          cp mwv13_tv_remote.txt MyWebViewer_v1/app/src/main/assets/tv-remote.js
+          sed -i 's/versionCode = 3/versionCode = 4/; s/versionName = "1.2"/versionName = "1.3"/' MyWebViewer_v1/app/build.gradle.kts
+          grep -q 'versionCode = 4' MyWebViewer_v1/app/build.gradle.kts
+          grep -q 'dispatchKeyEvent' MyWebViewer_v1/app/src/main/java/com/jooh/mywebviewer/MainActivity.java
+      - name: Compile release APK without private signing key
         working-directory: MyWebViewer_v1
         run: gradle --no-daemon --stacktrace :app:assembleRelease
-      - name: Export source and offline signing tools
+      - name: Pack exact source and builder
         run: |
           test -s MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
-          BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
-          test -s "$BUILD_TOOLS/lib/apksigner.jar"
-          test -s "$BUILD_TOOLS/zipalign"
-          cp "$BUILD_TOOLS/lib/apksigner.jar" apksigner.jar
-          cp "$BUILD_TOOLS/zipalign" zipalign
-          tar -czf MyWebViewer_v1_2_tv_source.tgz MyWebViewer_v1
+          tar -czf MyWebViewer_v1_3_TV_DeX_source.tgz MyWebViewer_v1
           sha256sum MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: MyWebViewer-v1-2-TV-unsigned
+          name: MyWebViewer-v1-3-TV-unsigned
           if-no-files-found: error
           path: |
             MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
-            MyWebViewer_v1_2_tv_source.tgz
-            apksigner.jar
-            zipalign
+            MyWebViewer_v1_3_TV_DeX_source.tgz
