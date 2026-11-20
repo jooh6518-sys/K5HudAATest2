@@ -1,13 +1,14 @@
-name: Build MyWebViewer 1.2 TV/DeX unsigned APK
+name: Build Joott 1.4 APK
 on:
   push:
-    branches: [mywebviewer-v1-2-tv-build]
+    branches: [mywebviewer-v1-4-tablet-build]
   workflow_dispatch:
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -17,38 +18,39 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Install Android SDK packages
+      - name: Fetch v1.3 source
+        uses: actions/download-artifact@v4
+        with:
+          name: MyWebViewer-v1-3-TV-unsigned
+          run-id: 44688515618
+          github-token: ${{ github.token }}
+          path: previous
+      - name: Patch to Joott v1.4
+        run: |
+          tar -xzf previous/MyWebViewer_v1_3_TV_DeX_source.tgz
+          base64 -d joott_patch.py.gz.b64 | gzip -d > joott_patch.py
+          python3 joott_patch.py MyWebViewer_v1
+          grep -q 'android:label="Joott"' MyWebViewer_v1/app/src/main/AndroidManifest.xml
+          grep -q 'versionCode = 5' MyWebViewer_v1/app/build.gradle.kts
+          rm -rf MyWebViewer_v1/app/build MyWebViewer_v1/.gradle
+      - name: Install SDK
         run: |
           SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
           test -n "$SDKMANAGER"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
           "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
-      - name: Assemble exact source from existing 1.1 + 1.2 overlay
-        run: |
-          tar -xzf MyWebViewer_v1_source.tgz
-          cp overlay-assets/* MyWebViewer_v1/app/src/main/assets/
-          python3 v1_1_patch.py
-          tar -xJf MyWebViewer_v1_2_tv_overlay.tar.xz -C MyWebViewer_v1
-          test -s MyWebViewer_v1/app/src/main/res/drawable/tv_banner.png
-      - name: Compile unsigned release APK
+      - name: Compile unsigned release
         working-directory: MyWebViewer_v1
         run: gradle --no-daemon --stacktrace :app:assembleRelease
-      - name: Export source and offline signing tools
+      - name: Package source
         run: |
           test -s MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
-          BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
-          test -s "$BUILD_TOOLS/lib/apksigner.jar"
-          test -s "$BUILD_TOOLS/zipalign"
-          cp "$BUILD_TOOLS/lib/apksigner.jar" apksigner.jar
-          cp "$BUILD_TOOLS/zipalign" zipalign
-          tar -czf MyWebViewer_v1_2_tv_source.tgz MyWebViewer_v1
+          tar -czf Joott_v1_4_source.tgz --exclude=build --exclude=.gradle MyWebViewer_v1
           sha256sum MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: MyWebViewer-v1-2-TV-unsigned
+          name: Joott-v1-4-unsigned-and-source
           if-no-files-found: error
           path: |
             MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
-            MyWebViewer_v1_2_tv_source.tgz
-            apksigner.jar
-            zipalign
+            Joott_v1_4_source.tgz
