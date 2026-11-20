@@ -1,7 +1,7 @@
-name: Build Joott v1.13 unsigned APK
+name: Build Joott v1.14 unsigned APK
 on:
   push:
-    branches: [joott-v1-13-landscape-external]
+    branches: [joott-v1-14-remote-play-fullscreen-popup-scroll]
   workflow_dispatch:
 jobs:
   build:
@@ -18,41 +18,40 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Retrieve exact Joott v1.12 source
+      - name: Retrieve Joott v1.13 exact source
         uses: actions/download-artifact@v4
         with:
-          name: Joott-v1-12-unsigned-and-source
-          run-id: 44754320538
+          name: Joott-v1-13-unsigned-and-source
+          run-id: 44759334950
           github-token: ${{ github.token }}
           path: previous
-      - name: Verify and apply v1.13 source modifications
+      - name: Apply and verify Joott v1.14 changes
         run: |
-          tar -xzf previous/Joott_v1_12_source.tgz
-          cat joott_v113.part{0,1,2,3,4} | base64 -d | xz -d > joott_v113.patch
-          echo '8d499500dceeb0ca31be9d522a896cfc44f176adfcf5cb25f863f37dbf7286b5  joott_v113.patch' | sha256sum -c -
-          patch --batch --forward -d MyWebViewer_v1 -p1 < joott_v113.patch
-          grep -q 'versionCode = 14' MyWebViewer_v1/app/build.gradle.kts
-          grep -q 'versionName = "1.13"' MyWebViewer_v1/app/build.gradle.kts
-          grep -q 'lastManifestMediaUrl' MyWebViewer_v1/app/src/main/java/com/jooh/mywebviewer/MainActivity.java
+          tar -xzf previous/Joott_v1_13_source.tgz
+          cat joott_v114.part{0,1,2,3} | base64 -d | xz -d > joott_v114.patch
+          echo '88c32a186cec27415148d95ac2e830c76ebae54aefc9976ae5427ec1961d8ad0  joott_v114.patch' | sha256sum -c -
+          patch --batch --forward -d MyWebViewer_v1 -p1 < joott_v114.patch
+          grep -q 'versionCode = 15' MyWebViewer_v1/app/build.gradle.kts
+          grep -q 'versionName = "1.14"' MyWebViewer_v1/app/build.gradle.kts
+          test -s MyWebViewer_v1/app/src/main/assets/tv-remote.js
           rm -rf MyWebViewer_v1/app/build MyWebViewer_v1/.gradle
-      - name: Install Android SDK
+      - name: Install Android SDK packages
         run: |
           SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
-          test -n "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
-      - name: Compile unsigned release
+      - name: Build unsigned Android release
         working-directory: MyWebViewer_v1
         run: gradle --no-daemon --stacktrace :app:assembleRelease
-      - name: Package exact compiled source
+      - name: Package exact source and unsigned APK
         run: |
           test -s MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
-          tar -czf Joott_v1_13_source.tgz --exclude=build --exclude=.gradle MyWebViewer_v1
+          tar -czf Joott_v1_14_source.tgz --exclude=build --exclude=.gradle MyWebViewer_v1
           sha256sum MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: Joott-v1-13-unsigned-and-source
+          name: Joott-v1-14-unsigned-and-source
           if-no-files-found: error
           path: |
             MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
-            Joott_v1_13_source.tgz
+            Joott_v1_14_source.tgz
