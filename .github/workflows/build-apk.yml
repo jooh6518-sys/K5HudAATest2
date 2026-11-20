@@ -1,7 +1,7 @@
-name: Build Joott v1.9 unsigned APK
+name: Build Joott 1.10 unsigned release
 on:
   push:
-    branches: [joott-v1-9-remote-controls]
+    branches: [joott-v1-10-single-focus-player]
   workflow_dispatch:
 jobs:
   build:
@@ -18,23 +18,23 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Retrieve v1.8 source
+      - name: Restore latest Joott v1.9 source
         uses: actions/download-artifact@v4
         with:
-          name: Joott-v1-8-unsigned-and-source
-          run-id: 44709789871
+          name: Joott-v1-9-unsigned-and-source
+          run-id: 44741817814
           github-token: ${{ github.token }}
           path: previous
-      - name: Apply Joott 1.9 patch
+      - name: Apply Joott 1.10 patch
         run: |
-          tar -xzf previous/Joott_v1_8_source.tgz
-          cat joott19_patch.part{1,2,3}.txt | base64 -d | xz -d > joott_v19.diff
-          patch --batch --forward -p1 -d MyWebViewer_v1 < joott_v19.diff
-          grep -q 'versionCode = 10' MyWebViewer_v1/app/build.gradle.kts
-          grep -q 'versionName = "1.9"' MyWebViewer_v1/app/build.gradle.kts
-          grep -q 'joott-tv-focus-ring' MyWebViewer_v1/app/src/main/assets/tv-remote.js
+          tar -xzf previous/Joott_v1_9_source.tgz
+          base64 -d joott_v110.patch.xz.b64 | xz -d > joott_v110.patch
+          patch --batch --forward -p1 -d MyWebViewer_v1 < joott_v110.patch
+          grep -q 'versionCode = 11' MyWebViewer_v1/app/build.gradle.kts
+          grep -q 'versionName = "1.10"' MyWebViewer_v1/app/build.gradle.kts
+          grep -q 'createFullscreenControls' MyWebViewer_v1/app/src/main/java/com/jooh/mywebviewer/MainActivity.java
           rm -rf MyWebViewer_v1/app/build MyWebViewer_v1/.gradle
-      - name: Install Android SDK packages
+      - name: Install Android SDK
         run: |
           SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
           test -n "$SDKMANAGER"
@@ -43,15 +43,15 @@ jobs:
       - name: Compile unsigned release
         working-directory: MyWebViewer_v1
         run: gradle --no-daemon --stacktrace :app:assembleRelease
-      - name: Export unsigned APK and source
+      - name: Package unsigned APK and exact source
         run: |
           test -s MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
-          tar -czf Joott_v1_9_source.tgz --exclude=build --exclude=.gradle MyWebViewer_v1
+          tar -czf Joott_v1_10_source.tgz --exclude=build --exclude=.gradle MyWebViewer_v1
           sha256sum MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: Joott-v1-9-unsigned-and-source
+          name: Joott-v1-10-unsigned-and-source
           if-no-files-found: error
           path: |
             MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
-            Joott_v1_9_source.tgz
+            Joott_v1_10_source.tgz
