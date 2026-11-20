@@ -1,7 +1,7 @@
-name: Build MyWebViewer 1.1 APK
+name: Build MyWebViewer 1.2 unsigned APK
 on:
   push:
-    branches: [mywebviewer-v1-1-build]
+    branches: [mywebviewer-v1-2-build]
   workflow_dispatch:
 jobs:
   build:
@@ -21,25 +21,29 @@ jobs:
         run: |
           SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
           test -n "$SDKMANAGER"
-          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
-      - name: Unpack and patch v1 source into 1.1
+      - name: Prepare project and apply 1.2 changes
         run: |
           tar -xzf MyWebViewer_v1_source.tgz
           cp overlay-assets/* MyWebViewer_v1/app/src/main/assets/
           python3 v1_1_patch.py
-      - name: Build APK
+          python3 v1_2_patch.py
+      - name: Compile unsigned release
         working-directory: MyWebViewer_v1
-        run: gradle --no-daemon --stacktrace :app:assembleDebug
-      - name: Package source and verify
+        run: gradle --no-daemon --stacktrace :app:assembleRelease
+      - name: Prepare source and signing utility
         run: |
-          tar -czf MyWebViewer_v1_1_source.tgz MyWebViewer_v1
-          test -s MyWebViewer_v1/app/build/outputs/apk/debug/app-debug.apk
-          sha256sum MyWebViewer_v1/app/build/outputs/apk/debug/app-debug.apk
+          test -s MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
+          test -s "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar"
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" signer-tool.jar
+          tar -czf MyWebViewer_v1_2_source.tgz MyWebViewer_v1
+          sha256sum MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: MyWebViewer-v1-1-installable
+          name: MyWebViewer-v1-2-unsigned
           if-no-files-found: error
           path: |
-            MyWebViewer_v1/app/build/outputs/apk/debug/app-debug.apk
-            MyWebViewer_v1_1_source.tgz
+            MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
+            MyWebViewer_v1_2_source.tgz
+            signer-tool.jar
