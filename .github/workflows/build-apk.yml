@@ -31,6 +31,18 @@ jobs:
           cat joott_v115.part{0,1,2,3,4} | base64 -d | xz -d > joott_v115.patch
           echo 'c911753c1a9ea3bfcb8912623d67079cf93c212233bd63ece9e63213395a124e  joott_v115.patch' | sha256sum -c -
           patch --batch --forward -p1 -d MyWebViewer_v1 < joott_v115.patch
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('MyWebViewer_v1/app/src/main/java/com/jooh/mywebviewer/MainActivity.java')
+          s=p.read_text()
+          before='private final Runnable hideInactivePlayerControls = () -> {'
+          assert s.count(before)==1
+          s=s.replace(before,'private final Runnable hideInactivePlayerControls = () -> hidePlayerControlsNow();\n    private void hidePlayerControlsNow() {',1)
+          tail='            showFullscreenControls(false);\n    };\n    private void reschedulePlayerControlsHide()'
+          assert s.count(tail)==1
+          s=s.replace(tail,'            showFullscreenControls(false);\n    }\n    private void reschedulePlayerControlsHide()',1)
+          p.write_text(s)
+          PY
           grep -q 'versionCode = 16' MyWebViewer_v1/app/build.gradle.kts
           grep -q 'versionName = "1.15"' MyWebViewer_v1/app/build.gradle.kts
           grep -q 'seekVideoFromRemote' MyWebViewer_v1/app/src/main/java/com/jooh/mywebviewer/MainActivity.java
