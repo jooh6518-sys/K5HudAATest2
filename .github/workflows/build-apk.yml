@@ -1,7 +1,7 @@
-name: Build Joott v1.16 unsigned APK
+name: Build Joott v1.17 episode history release
 on:
   push:
-    branches: [joott-v1-16-history-cursor-focus]
+    branches: [joott-v1-17-episode-history]
   workflow_dispatch:
 jobs:
   build:
@@ -18,29 +18,25 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Download exact v1.15 source
+      - name: Restore v1.16 exact source
         uses: actions/download-artifact@v4
         with:
-          name: Joott-v1-15-unsigned-and-source
-          run-id: 44770738559
+          name: Joott-v1-16-unsigned-and-source
+          run-id: 44847157912
           github-token: ${{ github.token }}
           path: previous
-      - name: Apply verified v1.16 history and cursor modifications
+      - name: Apply verified v1.17 episode history patch
         run: |
-          tar -xzf previous/Joott_v1_15_source.tgz
-          cat joott_v116.part{0,1,2,3} | base64 -d | xz -d > joott_v116.patch
-          echo 'd8bb09888dbc37518a08fdf9f1a2a488a26aa243e7937b0031f248c1ab048dcd  joott_v116.patch' | sha256sum -c -
-          patch --batch --forward -p1 -d MyWebViewer_v1 < joott_v116.patch
-          cat joott_v116_wake.part{0,1,2} | base64 -d | xz -d > joott_v116_wake.patch
-          echo 'eae4b95fa8e56819329a63aec34eddfbc5b4f4b98d0d1b3f623ecf5817bdcbd7  joott_v116_wake.patch' | sha256sum -c -
-          patch --batch --forward -p1 -d MyWebViewer_v1 < joott_v116_wake.patch
-          grep -q 'versionCode = 17' MyWebViewer_v1/app/build.gradle.kts
-          grep -q 'versionName = "1.16"' MyWebViewer_v1/app/build.gradle.kts
-          grep -q 'showSeekCursorPreview' MyWebViewer_v1/app/src/main/java/com/jooh/mywebviewer/MainActivity.java
-          grep -q 'mwvTvRefreshRing' MyWebViewer_v1/app/src/main/assets/tv-remote.js
-          test -s MyWebViewer_v1/app/src/main/assets/watch-history.js
+          tar -xzf previous/Joott_v1_16_source.tgz
+          base64 -d joott_v117.patch.xz.b64 | xz -d > joott_v117.patch
+          echo '8e9d5c0500138b54c136a091fe546547e02c765d28680e47515db8aa952f58fd  joott_v117.patch' | sha256sum -c -
+          patch --batch --forward -p1 -d MyWebViewer_v1 < joott_v117.patch
+          grep -q 'versionCode = 18' MyWebViewer_v1/app/build.gradle.kts
+          grep -q 'versionName = "1.17"' MyWebViewer_v1/app/build.gradle.kts
+          test -s MyWebViewer_v1/app/src/main/assets/episode-capture.js
+          grep -q 'showCombinedWatchHistory' MyWebViewer_v1/app/src/main/java/com/jooh/mywebviewer/MainActivity.java
           rm -rf MyWebViewer_v1/app/build MyWebViewer_v1/.gradle
-      - name: Install Android SDK
+      - name: Android SDK dependencies
         run: |
           SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
           yes | "$SDKMANAGER" --licenses >/dev/null || true
@@ -48,20 +44,15 @@ jobs:
       - name: Compile release APK
         working-directory: MyWebViewer_v1
         run: gradle --no-daemon --stacktrace :app:assembleRelease
-      - name: Package exact source and Android signing tools
+      - name: Package exact source
         run: |
           test -s MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
-          tar -czf Joott_v1_16_source.tgz --exclude=build --exclude=.gradle MyWebViewer_v1
+          tar -czf Joott_v1_17_source.tgz --exclude=build --exclude=.gradle MyWebViewer_v1
           sha256sum MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
-          mkdir -p signature-tools
-          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" signature-tools/apksigner.jar
-          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" signature-tools/zipalign
       - uses: actions/upload-artifact@v4
         with:
-          name: Joott-v1-16-unsigned-and-source
+          name: Joott-v1-17-unsigned-and-source
           if-no-files-found: error
           path: |
             MyWebViewer_v1/app/build/outputs/apk/release/app-release-unsigned.apk
-            Joott_v1_16_source.tgz
-            signature-tools/apksigner.jar
-            signature-tools/zipalign
+            Joott_v1_17_source.tgz
